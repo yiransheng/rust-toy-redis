@@ -77,7 +77,7 @@ fn read_until_crlf<R: BufRead>(reader: &mut R, buffer: &mut Vec<u8>) -> io::Resu
 
     let length = reader.read_until(LF, buffer)?;
 
-    if buffer[length - 2] == CR {
+    if length >= 2 && buffer[length - 2] == CR {
         Ok(length)
     } else {
         Err(Error::new(
