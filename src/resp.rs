@@ -199,6 +199,7 @@ mod tests {
             "-MESSAGE error happenend\r\n",
             ":12\r\n",
             "$6\r\nfoobar\r\n",
+            "$8\r\nfoo\r\nbar\r\n",
             "$-1\r\n",
             "*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n",
         ];
