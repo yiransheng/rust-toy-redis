@@ -4,6 +4,7 @@ extern crate stringreader;
 
 mod resp;
 mod commands;
+mod store;
 
 use resp::{read_protocol, ProtocolError, RespProtocol, Result, SimpleBytes};
 

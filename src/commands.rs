@@ -11,7 +11,7 @@ pub enum Command {
         key: StringValue,
     },
     DEL {
-        key: StringValue,
+        keys: Vec<StringValue>,
     },
 }
 
@@ -36,15 +36,6 @@ impl Command {
                             Err(ProtocolError::ParseError)
                         }
                     }
-                    b"DEL" => {
-                        if len == 2 {
-                            let key = mem::replace(&mut protos[1], RespProtocol::Null);
-                            let key = key.try_into_string_value()?;
-                            Ok(Command::DEL { key })
-                        } else {
-                            Err(ProtocolError::ParseError)
-                        }
-                    }
                     b"SET" => {
                         if len == 3 {
                             let key = mem::replace(&mut protos[1], RespProtocol::Null);
@@ -52,6 +43,17 @@ impl Command {
                             let value = mem::replace(&mut protos[2], RespProtocol::Null);
                             let value = value.try_into_string_value()?;
                             Ok(Command::SET { key, value })
+                        } else {
+                            Err(ProtocolError::ParseError)
+                        }
+                    }
+                    b"DEL" => {
+                        if len >= 2 {
+                            let keys: Vec<StringValue> = protos[1..]
+                                .iter()
+                                .filter_map(|p| p.try_into_string_value().ok())
+                                .collect();
+                            Ok(Command::DEL { keys })
                         } else {
                             Err(ProtocolError::ParseError)
                         }

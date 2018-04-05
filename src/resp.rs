@@ -80,7 +80,7 @@ fn read_until_crlf<R: BufRead>(reader: &mut R, buffer: &mut Vec<u8>) -> Result<u
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub struct StringValue(Vec<u8>);
 
 impl<'a> From<&'a [u8]> for StringValue {
@@ -110,6 +110,11 @@ pub enum RespProtocol {
 impl RespProtocol {
     pub fn ok() -> Self {
         RespProtocol::SimpleString(SimpleBytes { bytes: "Ok".into() })
+    }
+    pub fn from_integer<N: Into<i64>>(n: N) -> Self {
+        let n = n.into();
+        let number = format!("{}", n).into_bytes();
+        RespProtocol::Integer(SimpleBytes { bytes: number })
     }
     pub fn as_bytes(&self) -> Result<&[u8]> {
         use self::RespProtocol::*;
@@ -204,8 +209,23 @@ impl From<StringValue> for RespProtocol {
         }
     }
 }
+impl<'a> From<&'a StringValue> for RespProtocol {
+    fn from(v: &StringValue) -> RespProtocol {
+        let xs = &v;
+        if xs.len() == 0 {
+            RespProtocol::Null
+        } else {
+            RespProtocol::BulkString(xs.to_vec())
+        }
+    }
+}
 impl From<Option<StringValue>> for RespProtocol {
     fn from(v: Option<StringValue>) -> RespProtocol {
+        v.map(RespProtocol::from).unwrap_or(RespProtocol::Null)
+    }
+}
+impl<'a> From<Option<&'a StringValue>> for RespProtocol {
+    fn from(v: Option<&StringValue>) -> RespProtocol {
         v.map(RespProtocol::from).unwrap_or(RespProtocol::Null)
     }
 }
