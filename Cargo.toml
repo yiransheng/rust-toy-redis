@@ -5,3 +5,4 @@ authors = ["Yiran Sheng <shengyiran@gmail.com>"]
 
 [dependencies]
 stringreader = "*"
+matches = "0.1.6"
