@@ -23,7 +23,7 @@ impl From<io::Error> for ProtocolError {
 
 pub type Result<T> = result::Result<T, ProtocolError>;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct SimpleBytes {
     // Wrapper aroung Vec<u8> ensures bytes stored
     // does not contain CR nor LF
@@ -97,7 +97,7 @@ impl Deref for StringValue {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum RespProtocol {
     SimpleString(SimpleBytes),
     Error(SimpleBytes),
@@ -118,6 +118,22 @@ impl RespProtocol {
             &SimpleString(ref bytes) => Ok(&bytes.bytes[..]),
             &BulkString(ref bytes) => Ok(&bytes[..]),
             _ => Err(ProtocolError::TypeError),
+        }
+    }
+    pub fn from_protocol_error(e: ProtocolError) -> Self {
+        match e {
+            ProtocolError::BadBytes => RespProtocol::Error(SimpleBytes {
+                bytes: "BadBytes".into(),
+            }),
+            ProtocolError::ParseError => RespProtocol::Error(SimpleBytes {
+                bytes: "ParseError".into(),
+            }),
+            ProtocolError::TypeError => RespProtocol::Error(SimpleBytes {
+                bytes: "TypeError".into(),
+            }),
+            ProtocolError::IoError(_) => RespProtocol::Error(SimpleBytes {
+                bytes: "IoError".into(),
+            }),
         }
     }
     pub fn try_into_string_value(self) -> Result<StringValue> {

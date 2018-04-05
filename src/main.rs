@@ -3,6 +3,7 @@ extern crate matches;
 extern crate stringreader;
 
 mod resp;
+mod commands;
 
 use resp::{read_protocol, ProtocolError, RespProtocol, Result, SimpleBytes};
 
