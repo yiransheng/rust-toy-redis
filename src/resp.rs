@@ -46,16 +46,12 @@ impl SimpleBytes {
     }
     pub fn read_from<R: BufRead>(reader: &mut R) -> Result<Self> {
         let mut buffer: Vec<u8> = Vec::new();
-        match read_until_crlf(reader, &mut buffer) {
-            Ok(_) => {
-                // remove CLRF line endings
-                buffer.pop();
-                buffer.pop();
+        let _ = read_until_crlf(reader, &mut buffer)?;
+        // remove CLRF line endings
+        buffer.pop();
+        buffer.pop();
 
-                Ok(SimpleBytes { bytes: buffer })
-            }
-            Err(err) => Err(ProtocolError::IoError(err)),
-        }
+        Ok(SimpleBytes { bytes: buffer })
     }
 }
 impl Into<Vec<u8>> for SimpleBytes {
@@ -71,7 +67,7 @@ impl Deref for SimpleBytes {
     }
 }
 
-fn read_until_crlf<R: BufRead>(reader: &mut R, buffer: &mut Vec<u8>) -> io::Result<usize> {
+fn read_until_crlf<R: BufRead>(reader: &mut R, buffer: &mut Vec<u8>) -> Result<usize> {
     let CR = '\r' as u8;
     let LF = '\n' as u8;
 
@@ -80,10 +76,7 @@ fn read_until_crlf<R: BufRead>(reader: &mut R, buffer: &mut Vec<u8>) -> io::Resu
     if length >= 2 && buffer[length - 2] == CR {
         Ok(length)
     } else {
-        Err(Error::new(
-            ErrorKind::Other,
-            "Invalid line ending, needs CRLF",
-        ))
+        Err(ProtocolError::BadBytes)
     }
 }
 
@@ -258,7 +251,7 @@ fn read_line_ending<R: BufRead>(reader: &mut R) -> io::Result<()> {
 pub fn read_protocol<R: BufRead>(reader: &mut R) -> Result<RespProtocol> {
     let mut header: Vec<u8> = Vec::new();
 
-    let length = read_until_crlf(reader, &mut header).map_err(ProtocolError::IoError)?;
+    let length = read_until_crlf(reader, &mut header)?;
 
     if length < 3 {
         return Err(ProtocolError::ParseError);

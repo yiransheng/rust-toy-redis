@@ -4,10 +4,10 @@ extern crate stringreader;
 
 mod resp;
 
-use resp::{read_protocol, RespProtocol, Result, SimpleBytes};
+use resp::{read_protocol, ProtocolError, RespProtocol, Result, SimpleBytes};
 
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::thread;
 use std::time::Duration;
 
@@ -15,7 +15,7 @@ fn sleep() {
     thread::sleep(Duration::from_millis(100));
 }
 
-fn run() -> Result<()> {
+fn run() -> io::Result<()> {
     let loopback = Ipv4Addr::new(127, 0, 0, 1);
     // Assigning port 0 requests the OS to assign a free port
     let socket = SocketAddrV4::new(loopback, 6379);
@@ -36,12 +36,15 @@ fn run() -> Result<()> {
 
                 let _ = tcp_stream.write_all(&response.into_bytes())?;
             }
-            Err(_) => {
-                let simple_bytes = SimpleBytes::from_bytes("ERR".as_bytes());
-                let response = RespProtocol::Error(simple_bytes.unwrap());
+            Err(err) => match err {
+                ProtocolError::IoError(e) => return Err(e),
+                _ => {
+                    let simple_bytes = SimpleBytes::from_bytes("ERR".as_bytes());
+                    let response = RespProtocol::Error(simple_bytes.unwrap());
 
-                let _ = tcp_stream.write_all(&response.into_bytes())?;
-            }
+                    let _ = tcp_stream.write_all(&response.into_bytes())?;
+                }
+            },
         }
         sleep();
     }
