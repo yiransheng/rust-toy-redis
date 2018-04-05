@@ -50,8 +50,8 @@ impl Command {
                     b"DEL" => {
                         if len >= 2 {
                             let keys: Vec<StringValue> = protos[1..]
-                                .iter()
-                                .filter_map(|p| p.try_into_string_value().ok())
+                                .iter_mut()
+                                .filter_map(|p| p.take().try_into_string_value().ok())
                                 .collect();
                             Ok(Command::DEL { keys })
                         } else {

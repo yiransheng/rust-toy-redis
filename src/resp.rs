@@ -4,6 +4,7 @@ use std::io::{self, BufRead, Error, ErrorKind};
 use std::result;
 use std::ops::Deref;
 use std::convert::{From, Into};
+use std::mem;
 
 const CRLF: &'static str = "\r\n";
 
@@ -191,6 +192,9 @@ impl RespProtocol {
                 v
             }
         }
+    }
+    pub fn take(&mut self) -> Self {
+        mem::replace(self, RespProtocol::Null)
     }
 }
 
