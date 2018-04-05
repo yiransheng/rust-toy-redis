@@ -6,7 +6,8 @@ mod resp;
 
 use resp::{read_protocol, ProtocolError, RespProtocol, Result, SimpleBytes};
 
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
+use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
+use std::result;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::thread;
 use std::time::Duration;
@@ -15,19 +16,11 @@ fn sleep() {
     thread::sleep(Duration::from_millis(100));
 }
 
-fn run() -> io::Result<()> {
-    let loopback = Ipv4Addr::new(127, 0, 0, 1);
-    // Assigning port 0 requests the OS to assign a free port
-    let socket = SocketAddrV4::new(loopback, 6379);
-    let listener = TcpListener::bind(socket)?;
-    let port = listener.local_addr()?;
-    println!("Listening on {}, access this port to end the program", port);
-    let (mut tcp_stream, addr) = listener.accept()?; //block  until requested
-    println!("Connection received! {:?} is sending data.", addr);
+fn handle_connection(mut tcp_stream: TcpStream) -> io::Result<()> {
+    let mut buffered_stream = tcp_stream.try_clone().map(BufReader::new)?;
 
-    let mut buf_reader = tcp_stream.try_clone().map(BufReader::new)?;
     loop {
-        let protocol = read_protocol(&mut buf_reader);
+        let protocol = read_protocol(&mut buffered_stream);
 
         match protocol {
             Ok(p) => {
@@ -48,6 +41,28 @@ fn run() -> io::Result<()> {
         }
         sleep();
     }
+}
+
+fn run() -> io::Result<()> {
+    let loopback = Ipv4Addr::new(127, 0, 0, 1);
+    let socket = SocketAddrV4::new(loopback, 6379);
+    let listener = TcpListener::bind(socket)?;
+    let port = listener.local_addr()?;
+
+    println!("Listening on {}, access this port to end the program", port);
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                thread::spawn(move || {
+                    let _ =
+                        handle_connection(stream).map_err(|e| println!("Connection died: {}", e));
+                });
+            }
+            Err(_) => (),
+        }
+    }
+    Ok(())
 }
 
 fn main() {
