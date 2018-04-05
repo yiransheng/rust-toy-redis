@@ -1,0 +1,14 @@
+[[package]]
+name = "stringreader"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "toy-redis"
+version = "0.1.0"
+dependencies = [
+ "stringreader 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[metadata]
+"checksum stringreader 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "913e7b03d63752f6cdd2df77da36749d82669904798fe8944b9ec3d23f159905"
