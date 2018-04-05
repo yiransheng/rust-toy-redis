@@ -7,28 +7,30 @@ mod commands;
 mod store;
 
 use resp::{read_protocol, ProtocolError, RespProtocol, Result, SimpleBytes};
+use store::Store;
+use commands::Command;
 
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
 use std::result;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::thread;
+use std::sync::Arc;
 use std::time::Duration;
 
 fn sleep() {
     thread::sleep(Duration::from_millis(100));
 }
 
-fn handle_connection(mut tcp_stream: TcpStream) -> io::Result<()> {
+fn handle_connection(mut tcp_stream: TcpStream, store: Arc<Store>) -> io::Result<()> {
     let mut buffered_stream = tcp_stream.try_clone().map(BufReader::new)?;
 
     loop {
         let protocol = read_protocol(&mut buffered_stream);
+        let cmd = protocol.and_then(Command::try_from_protocol);
 
-        match protocol {
-            Ok(p) => {
-                println!("{}", p.to_string());
-                let response = RespProtocol::ok();
-
+        match cmd {
+            Ok(cmd) => {
+                let response = store.run_command(cmd);
                 let _ = tcp_stream.write_all(&response.into_bytes())?;
             }
             Err(err) => match err {
@@ -46,6 +48,8 @@ fn handle_connection(mut tcp_stream: TcpStream) -> io::Result<()> {
 }
 
 fn run() -> io::Result<()> {
+    let store: Arc<Store> = Arc::new(Store::new());
+
     let loopback = Ipv4Addr::new(127, 0, 0, 1);
     let socket = SocketAddrV4::new(loopback, 6379);
     let listener = TcpListener::bind(socket)?;
@@ -56,9 +60,10 @@ fn run() -> io::Result<()> {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
+                let store = store.clone();
                 thread::spawn(move || {
-                    let _ =
-                        handle_connection(stream).map_err(|e| println!("Connection died: {}", e));
+                    let _ = handle_connection(stream, store)
+                        .map_err(|e| println!("Connection died: {}", e));
                 });
             }
             Err(_) => (),

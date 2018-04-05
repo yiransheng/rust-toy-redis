@@ -14,7 +14,7 @@ impl Store {
             store: RwLock::new(HashMap::new()),
         }
     }
-    pub fn run_command(&mut self, cmd: Command) -> RespProtocol {
+    pub fn run_command(&self, cmd: Command) -> RespProtocol {
         match cmd {
             Command::GET { key } => {
                 let store = self.store.read().unwrap();
