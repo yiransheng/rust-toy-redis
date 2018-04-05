@@ -32,12 +32,15 @@ pub struct SimpleBytes {
 impl SimpleBytes {
     pub fn from_bytes<B: Into<Vec<u8>>>(bytes: B) -> Result<Self> {
         let bytes = bytes.into();
-        let n = bytes.len();
-        for i in 0..n - 1 {
-            if bytes[i..i + 2] == *CRLF.as_bytes() {
+        let CR = '\r' as u8;
+        let LF = '\n' as u8;
+
+        for b in &bytes {
+            if *b == CR || *b == LF {
                 return Err(ProtocolError::BadBytes);
             }
         }
+
         Ok(SimpleBytes { bytes })
     }
     pub fn read_from<R: BufRead>(reader: &mut R) -> Result<Self> {
@@ -206,8 +209,18 @@ mod tests {
         let bytes_err_3 = "asdfa\r\n".as_bytes();
 
         assert_matches!(simple_bytes, Ok(_));
-        assert_matches!(SimpleBytes::from_bytes(bytes_err_1), Err(_));
-        assert_matches!(SimpleBytes::from_bytes(bytes_err_3), Err(_));
+        assert_matches!(
+            SimpleBytes::from_bytes(bytes_err_1),
+            Err(ProtocolError::BadBytes)
+        );
+        assert_matches!(
+            SimpleBytes::from_bytes(bytes_err_2),
+            Err(ProtocolError::BadBytes)
+        );
+        assert_matches!(
+            SimpleBytes::from_bytes(bytes_err_3),
+            Err(ProtocolError::BadBytes)
+        );
     }
 
     #[test]
