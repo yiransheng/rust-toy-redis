@@ -28,13 +28,13 @@ fn run() -> Result<()> {
             let simple_bytes = SimpleBytes::from_bytes("Ok".as_bytes());
             let response = RespProtocol::SimpleString(simple_bytes.unwrap());
 
-            let _ = tcp_stream.write_all(response.to_string().as_bytes())?;
+            let _ = tcp_stream.write_all(&response.into_bytes())?;
         }
         Err(_) => {
             let simple_bytes = SimpleBytes::from_bytes("ERR".as_bytes());
             let response = RespProtocol::Error(simple_bytes.unwrap());
 
-            let _ = tcp_stream.write_all(response.to_string().as_bytes())?;
+            let _ = tcp_stream.write_all(&response.into_bytes())?;
         }
     }
 

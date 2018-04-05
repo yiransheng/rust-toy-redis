@@ -96,6 +96,57 @@ pub enum RespProtocol {
     Array(Vec<RespProtocol>),
 }
 
+impl RespProtocol {
+    pub fn into_bytes(self) -> Vec<u8> {
+        use self::RespProtocol::*;
+
+        match self {
+            SimpleString(ref bytes) => {
+                let mut v = vec!['+' as u8];
+                v.extend_from_slice(bytes);
+                v.extend_from_slice(CRLF.as_bytes());
+                v
+            }
+            Error(ref bytes) => {
+                let mut v = vec!['-' as u8];
+                v.extend_from_slice(bytes);
+                v.extend_from_slice(CRLF.as_bytes());
+                v
+            }
+            Integer(ref bytes) => {
+                let mut v = vec![':' as u8];
+                v.extend_from_slice(bytes);
+                v.extend_from_slice(CRLF.as_bytes());
+                v
+            }
+            Null => "$-1\r\n".into(),
+            BulkString(ref bytes) => {
+                let mut v = vec!['$' as u8];
+                let len = bytes.len().to_string();
+                v.extend_from_slice(len.as_bytes());
+                v.extend_from_slice(CRLF.as_bytes());
+                v.extend_from_slice(bytes);
+                v.extend_from_slice(CRLF.as_bytes());
+                v
+            }
+            Array(xs) => {
+                let mut v = vec!['*' as u8];
+                let len = xs.len().to_string();
+                v.extend_from_slice(len.as_bytes());
+                v.extend_from_slice(CRLF.as_bytes());
+                v.extend(xs.into_iter().flat_map(RespProtocol::into_bytes));
+                v
+            }
+        }
+    }
+}
+
+impl Into<Vec<u8>> for RespProtocol {
+    fn into(self) -> Vec<u8> {
+        self.into_bytes()
+    }
+}
+
 impl string::ToString for RespProtocol {
     fn to_string(&self) -> String {
         use self::RespProtocol::*;
@@ -239,13 +290,17 @@ mod tests {
         for s in ok_tests {
             let mut reader = BufReader::new(StringReader::new(s));
             let protocol = read_protocol(&mut reader).unwrap();
+            let string_val = protocol.to_string();
 
             let mut rest = Vec::new();
             let rest_len = reader.read_to_end(&mut rest).unwrap();
 
-            assert_eq!(&protocol.to_string(), s);
+            assert_eq!(&string_val, s);
             // consumed all input
             assert_eq!(rest_len, 0);
+
+            let bytes = protocol.into_bytes();
+            assert_eq!(string_val.as_bytes(), &bytes[..]);
         }
     }
     //TODO: test expected ParseError
