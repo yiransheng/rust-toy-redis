@@ -56,7 +56,9 @@ impl SimpleBytes {
             Err(err) => Err(ProtocolError::IoError(err)),
         }
     }
-    pub fn into_bytes(self) -> Vec<u8> {
+}
+impl Into<Vec<u8>> for SimpleBytes {
+    fn into(self) -> Vec<u8> {
         self.bytes
     }
 }
@@ -131,7 +133,7 @@ impl string::ToString for RespProtocol {
 
 fn read_line_ending<R: BufRead>(reader: &mut R) -> io::Result<()> {
     let mut line_endings = [0u8; 2];
-    let length = reader.read_exact(&mut line_endings)?;
+    let _ = reader.read_exact(&mut line_endings)?;
 
     if line_endings == *CRLF.as_bytes() {
         Ok(())
