@@ -1,6 +1,6 @@
 use std::str::{self, FromStr};
 use std::string;
-use std::io::{self, BufRead, Error, ErrorKind, Read};
+use std::io::{self, BufRead, Error, ErrorKind};
 use std::result;
 use std::ops::Deref;
 use std::convert::Into;
@@ -190,7 +190,7 @@ pub fn read_protocol<R: BufRead>(reader: &mut R) -> Result<RespProtocol> {
 mod tests {
     use super::*;
     use stringreader::StringReader;
-    use std::io::BufReader;
+    use std::io::{BufReader, Read};
 
     #[test]
     fn test_read_to_string_ok() {
@@ -206,7 +206,13 @@ mod tests {
         for s in ok_tests {
             let mut reader = BufReader::new(StringReader::new(s));
             let protocol = read_protocol(&mut reader).unwrap();
+
+            let mut rest = Vec::new();
+            let rest_len = reader.read_to_end(&mut rest).unwrap();
+
             assert_eq!(&protocol.to_string(), s);
+            // consumed all input
+            assert_eq!(rest_len, 0);
         }
     }
     //TODO: test expected ParseError
