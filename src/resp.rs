@@ -11,6 +11,7 @@ const CRLF: &'static str = "\r\n";
 pub enum ProtocolError {
     BadBytes,
     ParseError,
+    TypeError,
     IoError(io::Error),
 }
 
@@ -87,6 +88,23 @@ fn read_until_crlf<R: BufRead>(reader: &mut R, buffer: &mut Vec<u8>) -> io::Resu
 }
 
 #[derive(Debug)]
+pub struct StringValue(Vec<u8>);
+
+impl<'a> From<&'a [u8]> for StringValue {
+    fn from(slice: &[u8]) -> StringValue {
+        StringValue(slice.to_vec())
+    }
+}
+
+impl Deref for StringValue {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
+#[derive(Debug)]
 pub enum RespProtocol {
     SimpleString(SimpleBytes),
     Error(SimpleBytes),
@@ -97,6 +115,27 @@ pub enum RespProtocol {
 }
 
 impl RespProtocol {
+    pub fn ok() -> Self {
+        RespProtocol::SimpleString(SimpleBytes { bytes: "Ok".into() })
+    }
+    pub fn as_bytes(&self) -> Result<&[u8]> {
+        use self::RespProtocol::*;
+
+        match self {
+            &SimpleString(ref bytes) => Ok(&bytes.bytes[..]),
+            &BulkString(ref bytes) => Ok(&bytes[..]),
+            _ => Err(ProtocolError::TypeError),
+        }
+    }
+    pub fn try_into_string_value(self) -> Result<StringValue> {
+        use self::RespProtocol::*;
+
+        match self {
+            SimpleString(bytes) => Ok(StringValue(bytes.into())),
+            BulkString(bytes) => Ok(StringValue(bytes)),
+            _ => Err(ProtocolError::TypeError),
+        }
+    }
     pub fn into_bytes(self) -> Vec<u8> {
         use self::RespProtocol::*;
 
@@ -144,6 +183,26 @@ impl RespProtocol {
 impl Into<Vec<u8>> for RespProtocol {
     fn into(self) -> Vec<u8> {
         self.into_bytes()
+    }
+}
+impl From<StringValue> for RespProtocol {
+    fn from(v: StringValue) -> RespProtocol {
+        let StringValue(xs) = v;
+        if xs.len() == 0 {
+            RespProtocol::Null
+        } else {
+            RespProtocol::BulkString(xs)
+        }
+    }
+}
+impl From<Option<StringValue>> for RespProtocol {
+    fn from(v: Option<StringValue>) -> RespProtocol {
+        v.map(RespProtocol::from).unwrap_or(RespProtocol::Null)
+    }
+}
+impl<E> From<result::Result<StringValue, E>> for RespProtocol {
+    fn from(v: result::Result<StringValue, E>) -> RespProtocol {
+        v.map(RespProtocol::from).unwrap_or(RespProtocol::Null)
     }
 }
 

@@ -25,8 +25,7 @@ fn run() -> Result<()> {
 
     match protocol {
         Ok(_) => {
-            let simple_bytes = SimpleBytes::from_bytes("Ok".as_bytes());
-            let response = RespProtocol::SimpleString(simple_bytes.unwrap());
+            let response = RespProtocol::ok();
 
             let _ = tcp_stream.write_all(&response.into_bytes())?;
         }
