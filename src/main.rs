@@ -36,8 +36,7 @@ fn handle_connection(mut tcp_stream: TcpStream, store: Arc<Store>) -> io::Result
             Err(err) => match err {
                 ProtocolError::IoError(e) => return Err(e),
                 _ => {
-                    let simple_bytes = SimpleBytes::from_bytes("ERR".as_bytes());
-                    let response = RespProtocol::Error(simple_bytes.unwrap());
+                    let response = RespProtocol::from_protocol_error(err);
 
                     let _ = tcp_stream.write_all(&response.into_bytes())?;
                 }

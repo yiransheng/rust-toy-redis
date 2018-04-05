@@ -1,6 +1,6 @@
 [package]
 name = "toy-redis"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Yiran Sheng <shengyiran@gmail.com>"]
 
 [dependencies]
