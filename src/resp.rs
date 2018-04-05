@@ -3,7 +3,7 @@ use std::string;
 use std::io::{self, BufRead, Error, ErrorKind};
 use std::result;
 use std::ops::Deref;
-use std::convert::Into;
+use std::convert::{From, Into};
 
 const CRLF: &'static str = "\r\n";
 
@@ -12,6 +12,12 @@ pub enum ProtocolError {
     BadBytes,
     ParseError,
     IoError(io::Error),
+}
+
+impl From<io::Error> for ProtocolError {
+    fn from(err: io::Error) -> ProtocolError {
+        ProtocolError::IoError(err)
+    }
 }
 
 pub type Result<T> = result::Result<T, ProtocolError>;
