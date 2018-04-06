@@ -1,3 +1,4 @@
+use bytes::{Bytes, BytesMut};
 use std::convert::{From, Into};
 use std::mem;
 
@@ -12,14 +13,19 @@ pub enum Value<T> {
 
 impl<'a, T: Into<&'a [u8]>> Into<&'a [u8]> for Value<T> {
     fn into(self) -> &'a [u8] {
-        let empty = [];
+        static EMPTY: [u8; 0] = [];
         match self {
             Value::SimpleString(v) => v.into(),
             Value::ErrorString(v) => v.into(),
             Value::IntegerString(v) => v.into(),
             Value::BulkString(v) => v.into(),
-            Value::Nil => &empty,
+            Value::Nil => &EMPTY,
         }
+    }
+}
+impl<T> Value<T> {
+    fn take(&mut self) -> Self {
+        mem::replace(self, Value::Nil)
     }
 }
 
@@ -30,12 +36,17 @@ pub enum Node<T> {
     Close,
 }
 
-pub struct ArrayTree<T> {
-    nodes: Vec<Node<T>>,
+#[derive(Debug)]
+pub struct RedisValue {
+    nodes: Vec<Node<Bytes>>,
+    values: BytesMut,
 }
 
-impl<T> Value<T> {
-    fn take(&mut self) -> Self {
-        mem::replace(self, Value::Nil)
+impl RedisValue {
+    fn new() -> Self {
+        RedisValue {
+            nodes: Vec::new(),
+            values: BytesMut::new(),
+        }
     }
 }
