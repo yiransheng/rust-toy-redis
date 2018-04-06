@@ -3,6 +3,8 @@ extern crate bytes;
 extern crate matches;
 extern crate stringreader;
 
+#[macro_use]
+mod macros;
 mod redis_value;
 mod commands;
 
