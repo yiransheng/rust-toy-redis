@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use std::convert::{From, Into};
 use std::mem;
 
@@ -9,6 +8,19 @@ pub enum Value<T> {
     IntegerString(T),
     BulkString(T),
     Nil,
+}
+
+impl<'a, T: Into<&'a [u8]>> Into<&'a [u8]> for Value<T> {
+    fn into(self) -> &'a [u8] {
+        let empty = [];
+        match self {
+            Value::SimpleString(v) => v.into(),
+            Value::ErrorString(v) => v.into(),
+            Value::IntegerString(v) => v.into(),
+            Value::BulkString(v) => v.into(),
+            Value::Nil => &empty,
+        }
+    }
 }
 
 #[derive(Debug)]
