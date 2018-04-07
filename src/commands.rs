@@ -1,6 +1,5 @@
 use std::result;
 use super::redis_value::{Node, Value};
-use std::convert::{From, Into};
 
 pub type Result<T> = result::Result<T, ParseError>;
 
@@ -30,9 +29,9 @@ enum ParserState<T> {
     Error(ParseError),
 }
 
-impl<'a, T> ParserState<Value<T>>
+impl<T> ParserState<Value<T>>
 where
-    T: Into<&'a [u8]>,
+    T: AsRef<[u8]>,
 {
     fn next_node(self, node: Node<T>) -> Self {
         use self::ParserState::*;
@@ -44,7 +43,7 @@ where
             },
             Started(n_items) => match node {
                 Node::Leaf(v) => {
-                    let keyword: &[u8] = v.into();
+                    let keyword: &[u8] = v.as_slice();
                     match keyword {
                         b"SET" if n_items == 3 => ParseSET(None, None),
                         b"GET" if n_items == 2 => ParseGET(None),
@@ -104,7 +103,7 @@ where
     }
 }
 
-pub fn parse_command<'a, T: Into<&'a [u8]>, I: IntoIterator<Item = Node<T>>>(
+pub fn parse_command<T: AsRef<[u8]>, I: IntoIterator<Item = Node<T>>>(
     iter: I,
 ) -> Result<Cmd<Value<T>>> {
     let mut state = ParserState::Start;

@@ -62,19 +62,19 @@ impl<'a, T> Iterator for ValueIter<'a, T> {
         self.value.take()
     }
 }
-
-impl<'a, T: Into<&'a [u8]>> Into<&'a [u8]> for Value<T> {
-    fn into(self) -> &'a [u8] {
+impl<T: AsRef<[u8]>> Value<T> {
+    pub fn as_slice(&self) -> &[u8] {
         static EMPTY: [u8; 0] = [];
         match self {
-            Value::SimpleString(v) => v.into(),
-            Value::ErrorString(v) => v.into(),
-            Value::IntegerString(v) => v.into(),
-            Value::BulkString(v) => v.into(),
-            Value::Nil => &EMPTY,
+            &Value::SimpleString(ref v) => v.as_ref(),
+            &Value::ErrorString(ref v) => v.as_ref(),
+            &Value::IntegerString(ref v) => v.as_ref(),
+            &Value::BulkString(ref v) => v.as_ref(),
+            &Value::Nil => &EMPTY,
         }
     }
 }
+
 impl<T> Value<T> {
     pub fn take(&mut self) -> Self {
         mem::replace(self, Value::Nil)
