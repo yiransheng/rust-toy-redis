@@ -66,6 +66,7 @@ impl<'a, T> Iterator for ValueIter<'a, T> {
     }
 }
 impl<T> Value<T> {
+    #[allow(dead_code)]
     pub fn take(&mut self) -> Self {
         mem::replace(self, Value::Nil)
     }
@@ -147,6 +148,7 @@ pub enum Node<T> {
     Close,
 }
 impl<T> Node<T> {
+    #[allow(dead_code)]
     fn map<R, F>(self, f: F) -> Node<R>
     where
         F: FnOnce(T) -> R,
@@ -467,8 +469,8 @@ mod tests {
 
     #[test]
     fn test_decode_from_buffer() {
-        let mut buf = Bytes::from("*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n");
-        let redis_val = RedisValue::decode(&buf);
+        let buf = Bytes::from("*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n");
+        let _redis_val = RedisValue::decode(&buf);
 
         //TODO: imple Eq for RedisValue
         assert_eq!(true, true);

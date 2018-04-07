@@ -6,7 +6,7 @@ use tokio_service::Service;
 
 use super::redis_value::{RedisValue, Value};
 use super::store::Store;
-use super::commands::{parse_command, Cmd};
+use super::commands::parse_command;
 
 pub struct RedisService {
     store: Arc<Store>,
