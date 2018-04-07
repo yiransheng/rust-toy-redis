@@ -127,6 +127,7 @@ impl RedisValue {
                     Values::One(value) => {
                         // copy from buffer
                         let value = value.map(|r| Bytes::from(&buf[r]));
+                        buf.clear();
                         Ok(Some(RedisValue {
                             nodes: vec![Node::Leaf(value)],
                         }))
@@ -158,6 +159,7 @@ impl RedisValue {
                                 Node::Close => Node::Close,
                             })
                             .collect();
+                        buf.clear();
                         Ok(Some(RedisValue { nodes }))
                     }
                 }
