@@ -23,7 +23,6 @@ impl Service for RedisService {
     type Future = Box<Future<Item = RedisValue, Error = io::Error>>;
 
     fn call(&self, req: RedisValue) -> Self::Future {
-        println!("Get req {:?}", req);
         Box::new(future::ok(RedisValue::ok()))
     }
 }

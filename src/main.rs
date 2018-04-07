@@ -28,8 +28,5 @@ fn main() {
     // The builder requires a protocol and an address
     let server = TcpServer::new(RedisProto, addr);
 
-    server.serve(move || {
-        println!("New Connection");
-        Ok(RedisService {})
-    });
+    server.serve(move || Ok(RedisService {}));
 }
