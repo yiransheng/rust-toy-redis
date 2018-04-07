@@ -116,21 +116,24 @@ impl RedisValue {
             nodes: vec![Node::Leaf(Value::SimpleString(Bytes::from("Ok")))],
         }
     }
-    pub fn decode<B: AsRef<[u8]>>(buf: &B) -> Result<Option<Self>, ()> {
+    pub fn decode<B: AsRef<[u8]>>(buf: &B) -> Result<Option<(usize, Self)>, ()> {
         let buf = buf.as_ref();
         let result = decode_values_from_slice(buf);
         match result {
             Err(DecodeError::Incomplete) => Ok(None),
             Err(DecodeError::Failed) => Err(()),
-            Ok((_, values)) => {
+            Ok((consumed, values)) => {
                 let n_bytes = values.byte_count();
                 match values {
                     Values::One(value) => {
                         // copy from buffer
                         let value = value.map(|r| Bytes::from(&buf[r]));
-                        Ok(Some(RedisValue {
-                            nodes: vec![Node::Leaf(value)],
-                        }))
+                        Ok(Some((
+                            consumed,
+                            RedisValue {
+                                nodes: vec![Node::Leaf(value)],
+                            },
+                        )))
                     }
                     Values::Many(mut nodes) => {
                         // will copy bytes from input buf into this
@@ -159,7 +162,7 @@ impl RedisValue {
                                 Node::Close => Node::Close,
                             })
                             .collect();
-                        Ok(Some(RedisValue { nodes }))
+                        Ok(Some((consumed, RedisValue { nodes })))
                     }
                 }
             }

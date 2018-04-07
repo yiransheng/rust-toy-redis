@@ -24,7 +24,7 @@ impl Decoder for RedisCodec {
         RedisValue::decode(&*buf)
             .map(|redis_val| {
                 match redis_val {
-                    Some(x) => {
+                    Some((consumed, x)) => {
                         // This is super Important!
                         //
                         // For a tokio Codec, returning Ok<Some<Item>> alone
@@ -34,7 +34,7 @@ impl Decoder for RedisCodec {
                         // There's a reason decode takes a &mut BytesMute, I
                         // guess, the Frame completes only if the buffer is
                         // drained fully, so it seems.
-                        buf.clear();
+                        buf.advance(consumed);
                         Some(x)
                     }
                     None => None,
