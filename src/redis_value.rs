@@ -1,4 +1,4 @@
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use std::convert::{AsRef, From, Into};
 use std::str::{self, FromStr};
 use std::mem;
@@ -76,7 +76,7 @@ impl<'a, T: Into<&'a [u8]>> Into<&'a [u8]> for Value<T> {
     }
 }
 impl<T> Value<T> {
-    fn take(&mut self) -> Self {
+    pub fn take(&mut self) -> Self {
         mem::replace(self, Value::Nil)
     }
 }
@@ -116,8 +116,9 @@ impl RedisValue {
             nodes: vec![Node::Leaf(Value::SimpleString(Bytes::from("Ok")))],
         }
     }
-    pub fn decode(buf: &mut BytesMut) -> Result<Option<Self>, ()> {
-        let result = decode_values_from_slice(buf.as_ref());
+    pub fn decode<B: AsRef<[u8]>>(buf: &B) -> Result<Option<Self>, ()> {
+        let buf = buf.as_ref();
+        let result = decode_values_from_slice(buf);
         match result {
             Err(DecodeError::Incomplete) => Ok(None),
             Err(DecodeError::Failed) => Err(()),
@@ -127,7 +128,6 @@ impl RedisValue {
                     Values::One(value) => {
                         // copy from buffer
                         let value = value.map(|r| Bytes::from(&buf[r]));
-                        buf.clear();
                         Ok(Some(RedisValue {
                             nodes: vec![Node::Leaf(value)],
                         }))
@@ -159,7 +159,6 @@ impl RedisValue {
                                 Node::Close => Node::Close,
                             })
                             .collect();
-                        buf.clear();
                         Ok(Some(RedisValue { nodes }))
                     }
                 }
