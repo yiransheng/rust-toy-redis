@@ -1,77 +1,99 @@
 # Checkpoint
 
-version: 0.1.1
+version: 0.1.2
+
+[Previously...](https://github.com/yiransheng/rust-toy-redis/blob/0.1.1/CHECKPOINT.md)
 
 
 
 ## Design
 
-There's little design considerations in the current state of the codebase, mostly poking and tweaking things as I went, and trying to get things compile.
+* Replaced everything with tokio stack
+* Rewrote the value type(s), `RespProtocol` -> `RedisValue`
+
+Overall, writing a tokio service is surprisingly easy and the experience is pretty nice - once I got a good grasp of underlying layers of abstraction (`Codec`, `Proto` and `Service`).  `protocol.rs` and `service.rs` is very short and clean now.
 
 
 
-*  Central type for the application is `RespProtocol` in resp mod, an enum sufficiently representing all encodings of redis protocol:
+Unfortunately, the domain logic (RESP protocol) is still quite messy and more contrived than necessary (`redis_value.rs`). A major factor that prompted to for a rewrite here is to avoid nested `Vec`s. The type I used was:
 
-  * Simple String: "+Ok\r\n"
+```rust
+#[derive(Debug, Eq, PartialEq)]
+pub enum RespProtocol {
+    SimpleString(SimpleBytes),
+    Error(SimpleBytes),
+    Integer(SimpleBytes),
+    Null,
+    BulkString(Vec<u8>),
+    Array(Vec<RespProtocol>),
+}
+```
 
-  * Error: "-ERR\r\n"
+It's a recursive type: note the `Array(Vec<RespProtocol>)` variant. If we group all non-array variants together and consider them `Primitive`, this `enum` is conceptually an nested list or an S-expression-like structure with the atoms being `Primitive`s. Another way to think about it is a nested JSON array like:
 
-  * Integer: ":12\r\n"
+```json
+[
+    [
+        "+OK\r\n",
+        ":12\r\n",
+        [],
+    ]
+    "$3\r\nfoo\r\n",
+]
+```
 
-  * BulkString: "$6\r\nfoobar\r\n"
+A kind of JSON tokenizer might represent this as:
 
-  * BulkString Null: "$-1\r\n"
+```
+[
+    { type: 'array_open' },
+    { type: 'array_open' },
+    { type: 'primitive', value: "+OK\r\n" },
+    { type: 'primitive', value: ":12\r\n" },
+    { type: 'array_open' },
+    { type: 'array_close' },
+    { type: 'array_close' },
+    { type: 'primitive', value: "$3\r\nfoo\r\n" },
+    { type: 'array_close' },
+]
+```
 
-  * Array: 
+The old representation just represent it as nested `Vec`s - which is simple and straightforward, but I had a thought that I could achieve a more compact representation in terms of memory layout. The new idea is to take recursive part out, and have the follow `enum` for basic values: 
 
-    ```
-    *3\r\n
-    $3\r\n
-    foo\r\n
-    $-1\r\n
-    $3\r\n
-    bar\r\n
-    ```
+```rust
+pub enum Value<T> {
+    SimpleString(T),
+    ErrorString(T),
+    IntegerString(T),
+    BulkString(T),
+    Nil,
+}
+```
 
-* A struct `StringValue` is used as value types, constructed from `RespProtocol` 's `try_into_string_value` - getting an `Ok<StringValue>` only for SimpleString and BulkString
+For an array type, I wanted to have its data packed densely in a single buffer - with each sub-slice corresponding to one of the simple value variant (`Value::Nil` would require a zero-lengthed sub-slice). Of course, some sort of metadata type needs to be stored as well to make sense of the flat buffer. It was at this point, I decided on the "tokenizer-like" approach above, to store RESP arrays as `Vec` of tokens:
 
-* Storage is an `Arc<RwLock<HashMap<StringValue, StringValue>>>`, it was surprisingly easy to get it working without compile errors
+```rust
+#[derive(Debug)]
+pub struct RedisValue {
+    pub nodes: Vec<Node<Bytes>>,
+}
+#[derive(Debug)]
+pub enum Node<T> {
+    Leaf(Value<T>),
+    Open(usize),
+    Close,
+}
+```
 
-* Error handling is primitive but I tried to use as little `unwrap` as possible in application code, only one error type is used:
+The `Bytes` struct from `bytes` create is an owned type but can share a same underlying buffer - which is ref counted under the hood (`Arc`). So all the leaf nodes in a `RedisValue` can have their `Bytes` backed by the same continues region in memory. The `Open` "token" also stores how many items in the current array - to make calculate the encoding size of `RedisValue` easier. 
 
-  ```rust
-  enum ProtocolError {
-      BadBytes,
-      ParseError,
-      TypeError,
-      IoError(io::Error),
-  }
-  ```
 
-* Almost all functions return `Result<T, ProtocolError>`. 
 
-  * Note: found out a neat way to use `?` syntax
-  * Given a function `fn f(..) -> Result<T,  ProtocolError>`, `expr?` works if:
-    * `expr: io::Result<T>` and,
-    * `ProtocolError` implements `From<io::Error>` (trivially done)
+Unfortunately, this shifts the burden of parsing to the consumer of `RedisValue`s ,for example, I had to write a parser to get a `Command` out of `RedisValue`. Also, the decoding part ended up quite complicated. I am not even entirely sure the implementation is correct (the application it self still only handles 'SET' 'GET' and 'DEL', which don't utilize nested arrays at all). I wrote some basic unit tests for decoding - but there were so many intricate bytes manipulation in and out of `BytesMut` buffer handled over by `tokio`, the cod e really wasn't very pleasant to work with.
 
-* For each client connection, a new thread is spawned, not a very scalable solution, but at least it allows mult-threading and concurrently connections
 
-* Each such thread handles non-io `ProtocolError` returned from every stage of operation by writing back an `RespProtocol::Error` message, which could be understood by `redis-cli` - not descriptive at all but keeps the connection alive
 
-* The thread breaks its `loop` and completes if any `IoError` is encountered, logging it (disconnected client returns a "broken pipe" error from OS(Linux))
-
-  * Ideally, somewhere should check for bytes read, and translate that into client disconnect event (if bytes read is 0)
-
-* Parsing bytes into `RespProtocol` replies on its input to be `BufRead` (I was using `read_until`), which means underlying `TcpStream` had to be cloned and wrapped in `BufReader`. There are many areas I know can be done better, but this is a major one - will need to research a better solution
-
-* In factor, the `RespProtocol` abstraction itself is questionable, some thoughts needs to be put into it for the next iteration
-
-* Easy next steps:
-
-  * Use `bytes` crate, found out about its existence after staring the project - hopefully it can alleviate a lot of pains dealing with `Vec<u8>` 
-  * Moving into `tokio` universe and async io - which will probably trash most of `RespProtocol` - as its key mechanism is centered around `BufRead`, whereas `tokio` uses `AsyncRead` and `Codec` etc. Don't understand all of it yet, but should be exciting
-  * After that maybe poke around a bit in lower level stuff in `mio` directly
+I might revert back to the old recursive type for its simplicity...
 
 
 
