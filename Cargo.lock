@@ -397,6 +397,7 @@ version = "0.1.1"
 dependencies = [
  "bytes 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "matches 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "stringreader 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-core 0.1.16 (registry+https://github.com/rust-lang/crates.io-index)",

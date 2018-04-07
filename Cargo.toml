@@ -7,6 +7,7 @@ authors = ["Yiran Sheng <shengyiran@gmail.com>"]
 stringreader = "0.1.1"
 matches = "0.1.6"
 
+lazy_static = "1.0"
 bytes = "0.4.6"
 futures = "0.1"
 tokio-io = "0.1"
