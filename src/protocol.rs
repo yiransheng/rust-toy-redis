@@ -45,11 +45,7 @@ impl Encoder for RedisCodec {
     type Error = io::Error;
 
     fn encode(&mut self, msg: RedisValue, buf: &mut BytesMut) -> io::Result<()> {
-        let bytes = msg.as_bytes();
-        // Reserve enough space for the line
-        buf.reserve(bytes.len());
-
-        buf.extend(bytes);
+        msg.encode(buf);
 
         Ok(())
     }

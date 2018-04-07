@@ -15,6 +15,7 @@ extern crate tokio_service;
 mod macros;
 mod redis_value;
 mod commands;
+mod store;
 mod protocol;
 mod service;
 

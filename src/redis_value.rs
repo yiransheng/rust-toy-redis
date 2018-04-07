@@ -1,4 +1,4 @@
-use bytes::Bytes;
+use bytes::{BufMut, Bytes, BytesMut};
 use std::convert::{AsRef, From, Into};
 use std::str::{self, FromStr};
 use std::mem;
@@ -45,6 +45,9 @@ impl<T> Value<T> {
             Value::Nil => None,
         }
     }
+    pub fn as_option(&self) -> Option<&T> {
+        self.as_ref().into_option()
+    }
     pub fn iter(&self) -> ValueIter<T> {
         ValueIter {
             value: self.as_ref().into_option(),
@@ -62,6 +65,11 @@ impl<'a, T> Iterator for ValueIter<'a, T> {
         self.value.take()
     }
 }
+impl<T> Value<T> {
+    pub fn take(&mut self) -> Self {
+        mem::replace(self, Value::Nil)
+    }
+}
 impl<T: AsRef<[u8]>> Value<T> {
     pub fn as_slice(&self) -> &[u8] {
         static EMPTY: [u8; 0] = [];
@@ -74,10 +82,58 @@ impl<T: AsRef<[u8]>> Value<T> {
         }
     }
 }
-
-impl<T> Value<T> {
-    pub fn take(&mut self) -> Self {
-        mem::replace(self, Value::Nil)
+impl Value<Bytes> {
+    pub fn from_slice(s: &[u8]) -> Self {
+        if s.len() > 0 {
+            Value::BulkString(Bytes::from(s))
+        } else {
+            Value::Nil
+        }
+    }
+    pub fn from_integer<N: Into<i64>>(n: N) -> Self {
+        let n = n.into();
+        let number = format!("{}", n).into_bytes();
+        Value::IntegerString(Bytes::from(number))
+    }
+    pub fn size(&self) -> usize {
+        let content_len = self.as_option().map_or(0, |b| b.len());
+        match self {
+            &Value::Nil => "$-1\r\n".len(),
+            // $ (1 byte) + usize_size(content_len) + \r\n (2) + contents + \r\n (2)
+            &Value::BulkString(_) => 1 + usize_string_size(content_len) + 2 + content_len + 2,
+            // + (1 byte) + content_len + \r\n (2 bytes)
+            _ => 1 + content_len + 2,
+        }
+    }
+    // may panic assume buf has enough capacity (thus should not make this fn public)
+    fn encode(&self, buf: &mut BytesMut) {
+        match self {
+            &Value::Nil => {
+                buf.put("$-1\r\n");
+            }
+            &Value::SimpleString(ref b) => {
+                buf.put(b'+');
+                buf.extend_from_slice(&b[..]);
+                buf.put("\r\n");
+            }
+            &Value::ErrorString(ref b) => {
+                buf.put(b'-');
+                buf.extend_from_slice(&b[..]);
+                buf.put("\r\n");
+            }
+            &Value::IntegerString(ref b) => {
+                buf.put(b':');
+                buf.extend_from_slice(&b[..]);
+                buf.put("\r\n");
+            }
+            &Value::BulkString(ref b) => {
+                buf.put(b'$');
+                buf.put(format!("{}", b.len()));
+                buf.put("\r\n");
+                buf.extend_from_slice(&b[..]);
+                buf.put("\r\n");
+            }
+        }
     }
 }
 
@@ -115,6 +171,23 @@ impl RedisValue {
         RedisValue {
             nodes: vec![Node::Leaf(Value::SimpleString(Bytes::from("Ok")))],
         }
+    }
+    pub fn from_value(v: Value<Bytes>) -> Self {
+        RedisValue {
+            nodes: vec![Node::Leaf(v)],
+        }
+    }
+    pub fn size(&self) -> usize {
+        self.nodes
+            .iter()
+            .map(|node| {
+                match node {
+                    &Node::Open(n) => usize_string_size(n) + 3, // '*' + <n item> | \r\n
+                    &Node::Close => 0,
+                    &Node::Leaf(ref v) => v.size(),
+                }
+            })
+            .sum()
     }
     pub fn decode<B: AsRef<[u8]>>(buf: &B) -> Result<Option<(usize, Self)>, ()> {
         let buf = buf.as_ref();
@@ -168,8 +241,22 @@ impl RedisValue {
             }
         }
     }
-    pub fn as_bytes(&self) -> &[u8] {
-        "+Ok\r\n".as_bytes()
+
+    pub fn encode(&self, buf: &mut BytesMut) {
+        buf.reserve(self.size());
+        for node in &self.nodes {
+            match node {
+                &Node::Open(n) => {
+                    buf.put(b'*');
+                    buf.put(format!("{}", n));
+                    buf.put("\r\n");
+                }
+                &Node::Leaf(ref v) => {
+                    v.encode(buf);
+                }
+                _ => {}
+            }
+        }
     }
 }
 
@@ -312,6 +399,27 @@ fn decode_one(src: &[u8]) -> DecodeResult {
         }
     } else {
         Err(DecodeError::Incomplete)
+    }
+}
+
+fn usize_string_size(mut v: usize) -> usize {
+    let mut result = 1;
+    loop {
+        if v < 10 {
+            return result;
+        }
+        if v < 100 {
+            return result + 1;
+        }
+        if v < 1000 {
+            return result + 2;
+        }
+        if v < 10000 {
+            return result + 3;
+        }
+
+        v /= 10000;
+        result += 4;
     }
 }
 

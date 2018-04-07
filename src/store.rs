@@ -1,11 +1,13 @@
 use std::sync::RwLock;
 use std::collections::HashMap;
 
-use super::resp::{RespProtocol, StringValue};
-use super::commands::Command;
+use super::redis_value::{RedisValue, Value};
+use super::commands::Cmd;
+
+type Item = Vec<u8>;
 
 pub struct Store {
-    store: RwLock<HashMap<StringValue, StringValue>>,
+    store: RwLock<HashMap<Item, Item>>,
 }
 
 impl Store {
@@ -14,27 +16,27 @@ impl Store {
             store: RwLock::new(HashMap::new()),
         }
     }
-    pub fn run_command(&self, cmd: Command) -> RespProtocol {
+    pub fn run_command<T: AsRef<[u8]>>(&self, cmd: Cmd<T>) -> RedisValue {
         match cmd {
-            Command::GET { key } => {
+            Cmd::GET { key } => {
                 let store = self.store.read().unwrap();
-                let value = store.get(&key);
-                RespProtocol::from(value)
+                let value = store.get(key.as_ref());
+                let value = value.map_or(Value::Nil, |s| Value::from_slice(s));
+                RedisValue::from_value(value)
             }
-            Command::DEL { keys } => {
+            Cmd::DEL { keys } => {
                 let mut store = self.store.write().unwrap();
                 let deleted: usize = (&keys)
                     .iter()
-                    .map(|k| store.remove(k).map_or(0, |_| 1))
+                    .map(|k| store.remove(k.as_ref()).map_or(0, |_| 1))
                     .sum();
 
-                RespProtocol::from_integer(deleted as i64)
+                RedisValue::from_value(Value::from_integer(deleted as i64))
             }
-            Command::SET { key, value } => {
+            Cmd::SET { key, value } => {
                 let mut store = self.store.write().unwrap();
-                store.insert(key, value);
-
-                RespProtocol::ok()
+                store.insert(key.as_ref().to_vec(), value.as_ref().to_vec());
+                RedisValue::ok()
             }
         }
     }
