@@ -95,6 +95,9 @@ impl Value<Bytes> {
         let number = format!("{}", n).into_bytes();
         Value::IntegerString(Bytes::from(number))
     }
+    pub fn from_error(e: &str) -> Self {
+        Value::ErrorString(Bytes::from(e))
+    }
     pub fn size(&self) -> usize {
         let content_len = self.as_option().map_or(0, |b| b.len());
         match self {
@@ -164,7 +167,7 @@ impl<T> Node<T> {
 
 #[derive(Debug)]
 pub struct RedisValue {
-    nodes: Vec<Node<Bytes>>,
+    pub nodes: Vec<Node<Bytes>>,
 }
 impl RedisValue {
     pub fn ok() -> Self {

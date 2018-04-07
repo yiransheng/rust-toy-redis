@@ -19,9 +19,11 @@ mod store;
 mod protocol;
 mod service;
 
+use std::sync::Arc;
 use tokio_proto::TcpServer;
 
 use protocol::RedisProto;
+use store::Store;
 use service::RedisService;
 
 fn main() {
@@ -30,6 +32,7 @@ fn main() {
 
     // The builder requires a protocol and an address
     let server = TcpServer::new(RedisProto, addr);
+    let store = Arc::new(Store::new());
 
-    server.serve(move || Ok(RedisService {}));
+    server.serve(move || Ok(RedisService::new(store.clone())));
 }

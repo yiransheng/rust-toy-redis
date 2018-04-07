@@ -10,6 +10,7 @@ pub enum Cmd<T> {
     DEL { keys: Vec<T> },
 }
 
+#[derive(Debug)]
 pub enum ParseError {
     Unexpected,
     UnknownCmd,
