@@ -159,6 +159,9 @@ impl RedisValue {
             }
         }
     }
+    pub fn as_bytes(&self) -> &[u8] {
+        "+Ok\r\n".as_bytes()
+    }
 }
 
 #[derive(Debug)]
