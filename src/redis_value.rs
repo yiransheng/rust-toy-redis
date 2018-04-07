@@ -353,8 +353,8 @@ mod tests {
 
     #[test]
     fn test_decode_from_buffer() {
-        let mut buf = BytesMut::from("*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n");
-        let redis_val = RedisValue::decode(&mut buf);
+        let mut buf = Bytes::from("*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n");
+        let redis_val = RedisValue::decode(&buf);
 
         //TODO: imple Eq for RedisValue
         assert_eq!(true, true);
