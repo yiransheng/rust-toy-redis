@@ -12,5 +12,5 @@
 * [x] Parse Commands (only SET and GET) from Resp Array
   * [x] Make a `HashMap` based storage, and handle `SET` and `GET`
   * [ ] Maybe generalize to parse more commands
-* [ ] Somehow use tokio event loops
-* [ ] Re-write protocols in tokio
+* [x] Somehow use tokio event loops
+* [x] Re-write protocols in tokio
