@@ -1,14 +1,10 @@
-use std::{io, str};
+use std::io;
 
 use bytes::BytesMut;
-use futures::{future, Future};
 
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::{Decoder, Encoder, Framed};
-use tokio_core::net::TcpStream;
-use tokio_core::reactor::Handle;
-use tokio_proto::{TcpClient, TcpServer};
-use tokio_proto::pipeline::{ClientProto, ClientService, ServerProto};
+use tokio_proto::pipeline::ServerProto;
 
 use super::redis_value::RedisValue;
 
