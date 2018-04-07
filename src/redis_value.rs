@@ -111,6 +111,11 @@ pub struct RedisValue {
     nodes: Vec<Node<Bytes>>,
 }
 impl RedisValue {
+    pub fn ok() -> Self {
+        RedisValue {
+            nodes: vec![Node::Leaf(Value::SimpleString(Bytes::from("Ok")))],
+        }
+    }
     pub fn decode(buf: &mut BytesMut) -> Result<Option<Self>, ()> {
         let result = decode_values_from_slice(buf.as_ref());
         match result {
@@ -219,7 +224,10 @@ fn decode_values_from_slice(src: &[u8]) -> DecodeResult {
                         // decode one
                         let (consumed, result) = decode_values_from_slice(&src[index..])?;
                         match result {
-                            Values::One(value) => nodes.push(Node::Leaf(value)),
+                            Values::One(value) => {
+                                let value = value.map(|rng| (rng.start + index..rng.end + index));
+                                nodes.push(Node::Leaf(value));
+                            }
                             Values::Many(mut inner_nodes) => for n in inner_nodes.drain(..) {
                                 nodes.push(n);
                             },
@@ -340,5 +348,14 @@ mod tests {
             let result = decode_values_from_slice(raw.as_bytes());
             assert_matches!(result, Err(DecodeError::Incomplete));
         }
+    }
+
+    #[test]
+    fn test_decode_from_buffer() {
+        let mut buf = BytesMut::from("*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n");
+        let redis_val = RedisValue::decode(&mut buf);
+
+        //TODO: imple Eq for RedisValue
+        assert_eq!(true, true);
     }
 }

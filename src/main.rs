@@ -14,12 +14,22 @@ mod macros;
 mod redis_value;
 mod commands;
 mod protocol;
+mod service;
 
-use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
-use std::result;
-use std::io::{self, BufRead, BufReader, Read, Write};
-use std::thread;
-use std::sync::Arc;
-use std::time::Duration;
+use tokio_proto::TcpServer;
 
-fn main() {}
+use protocol::RedisProto;
+use service::RedisService;
+
+fn main() {
+    // Specify the localhost address
+    let addr = "127.0.0.1:6379".parse().unwrap();
+
+    // The builder requires a protocol and an address
+    let server = TcpServer::new(RedisProto, addr);
+
+    server.serve(move || {
+        println!("New Connection");
+        Ok(RedisService {})
+    });
+}
