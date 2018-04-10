@@ -495,3 +495,17 @@ impl DecodeBytes for ExpectBytes {
         }
     }
 }
+
+pub struct AnyByte;
+
+impl DecodeBytes for AnyByte {
+    type Output = ();
+
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+        if bytes.len() == 0 {
+            return Err(DecodeError::Incomplete);
+        }
+
+        Ok((&bytes[1..], ()))
+    }
+}

@@ -3,7 +3,7 @@ use bytes::Bytes;
 use std::convert::{AsRef, From};
 use std::mem;
 
-use super::traits::{end_line_crlf, DecodeBytes, DecodeError, ExpectByte};
+use super::traits::{end_line_crlf, AnyByte, DecodeBytes, DecodeError, ExpectByte};
 
 struct SafeByte;
 
@@ -22,24 +22,15 @@ impl DecodeBytes for SafeByte {
         }
     }
 }
-struct AnyByte;
 
-impl DecodeBytes for AnyByte {
-    type Output = ();
+fn take_slice<'a>(bytes: &'a [u8]) -> Result<&'a [u8], DecodeError> {
+    let sx: &[u8];
+    let (r, x) = SafeByte
+        .many_()
+        .parse_slice::<&'a [u8], _>(|s| unsafe { &*(s as *const [u8]) })
+        .decode(bytes)?;
 
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
-        if bytes.len() == 0 {
-            return Err(DecodeError::Incomplete);
-        }
-
-        Ok((&bytes[1..], ()))
-    }
-}
-
-impl Into<DecodeError> for ParseIntegerError {
-    fn into(self) -> DecodeError {
-        DecodeError::Fail
-    }
+    Ok(x)
 }
 
 fn check_bulk() -> impl DecodeBytes<Output = usize> {
@@ -48,7 +39,7 @@ fn check_bulk() -> impl DecodeBytes<Output = usize> {
             SafeByte
                 .many_()
                 .parse_slice(|s| btoi(s))
-                .filter_map(|x| x.ok())
+                .filter_map::<u64, _>(|x| x.ok())
                 .and_then_(|_| end_line_crlf)
                 .and_then(|n| AnyByte.repeat_(n))
                 .and_then_(|_| end_line_crlf)
