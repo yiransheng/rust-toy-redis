@@ -12,6 +12,7 @@ pub trait DecodeBytes: Sized {
 
     fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError>;
 
+    #[inline]
     fn decode_all<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
         let (remainder, out) = self.decode(bytes)?;
         if remainder.len() == 0 {
@@ -20,6 +21,7 @@ pub trait DecodeBytes: Sized {
             Err(DecodeError::Fail)
         }
     }
+    #[inline]
     fn decode_buf(&self, buf: &mut BytesMut) -> Result<Option<Self::Output>, ::std::io::Error> {
         let result;
         let consumed: usize;
@@ -41,27 +43,32 @@ pub trait DecodeBytes: Sized {
         result
     }
 
+    #[inline]
     fn unwrap_fail<T>(self) -> UnwrapFail<Self>
     where
         Self::Output: Into<Option<T>>,
     {
         UnwrapFail { src: self.into() }
     }
+    #[inline]
     fn count(self) -> BytesConsumed<Self> {
         BytesConsumed { src: self }
     }
+    #[inline]
     fn map<B, F>(self, f: F) -> Map<Self, F>
     where
         F: Fn(Self::Output) -> B,
     {
         Map { src: self, f }
     }
+    #[inline]
     fn map_slice<B, F>(self, f: F) -> MapSlice<Self, F>
     where
         F: Fn(&[u8]) -> B,
     {
         MapSlice { src: self, f }
     }
+    #[inline]
     fn and_then<B, F>(self, f: F) -> FlatMap<Self, F>
     where
         B: DecodeBytes,
@@ -69,6 +76,7 @@ pub trait DecodeBytes: Sized {
     {
         FlatMap { src: self, f }
     }
+    #[inline]
     fn and_then_<B, F>(self, f: F) -> FlatMap_<Self, F>
     where
         B: DecodeBytes,
@@ -76,18 +84,23 @@ pub trait DecodeBytes: Sized {
     {
         FlatMap_ { src: self, f }
     }
+    #[inline]
     fn or<B: DecodeBytes<Output = Self::Output>>(self, other: B) -> Alternative<Self, B> {
         Alternative { a: self, b: other }
     }
+    #[inline]
     fn many_(self) -> Many_<Self> {
         Many_ { one: self }
     }
+    #[inline]
     fn many(self) -> Many<Self> {
         Many { one: self }
     }
+    #[inline]
     fn repeat(self, n: u64) -> Repeat<Self> {
         Repeat { one: self, n }
     }
+    #[inline]
     fn repeat_(self, n: u64) -> Repeat_<Self> {
         Repeat_ { one: self, n }
     }
