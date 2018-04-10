@@ -8,60 +8,43 @@ use super::traits::{end_line_crlf, AnyByte, DecodeBytes, DecodeError, ExpectByte
 #[inline]
 fn check_bulk<'b>() -> impl DecodeBytes<'b, Output = usize> {
     ExpectByte::new(b'$')
-        .and_then(|_| {
-            LineSafeByte
-                .many_()
-                .parse_slice(|s| btoi(s))
-                .filter_map::<u64, _>(|x| x.ok())
-                .and_then_(|_| end_line_crlf)
-                .and_then(|n| AnyByte.repeat_(n))
-                .and_then_(|_| end_line_crlf)
-        })
+        .and(LineSafeByte.many_().parse_slice(btoi))
+        .filter_map(|x| x.ok())
+        .and_(end_line_crlf)
+        .and_then(|n| AnyByte.repeat_(n))
+        .and_(end_line_crlf)
         .count_bytes()
 }
 #[inline]
-fn parse_bulk<'b>() -> impl DecodeBytes<'b, Output = &'b str> {
+fn parse_bulk_str<'b>() -> impl DecodeBytes<'b, Output = &'b str> {
     ExpectByte::new(b'$')
         .and(LineSafeByte.many_().parse_slice(btoi))
         .filter_map(|x| x.ok())
-        .and_then_(|_| end_line_crlf)
+        .and_(end_line_crlf)
         .and_then(|n| {
             AnyByte
                 .repeat_(n)
                 .parse_slice(|s| str::from_utf8(s).unwrap())
         })
-        .and_then_(|_| end_line_crlf)
+        .and_(end_line_crlf)
 }
 
 #[inline]
 pub fn check_array<'b>() -> impl DecodeBytes<'b, Output = usize> {
     ExpectByte::new(b'*')
-        .and_then(|_| {
-            LineSafeByte
-                .many_()
-                .parse_slice(btoi)
-                .filter_map(|x| x.ok())
-                .and_then_(|_| end_line_crlf)
-                .and_then(|n| {
-                    let bulk = check_bulk();
-                    bulk.repeat_(n)
-                })
-        })
+        .and(LineSafeByte.many_().parse_slice(btoi))
+        .filter_map(|x| x.ok())
+        .and_then_(|_| end_line_crlf)
+        .and_then(|n| check_bulk().repeat_(n))
         .count_bytes()
 }
 #[inline]
-fn parse_array<'b>() -> impl DecodeBytes<'b, Output = Vec<&'b str>> {
-    ExpectByte::new(b'*').and_then(|_| {
-        LineSafeByte
-            .many_()
-            .parse_slice(|s| btoi(s))
-            .filter_map(|x| x.ok())
-            .and_then_(|_| end_line_crlf)
-            .and_then(|n| {
-                let bulk = parse_bulk();
-                bulk.repeat(n)
-            })
-    })
+fn parse_array_str<'b>() -> impl DecodeBytes<'b, Output = Vec<&'b str>> {
+    ExpectByte::new(b'*')
+        .and(LineSafeByte.many_().parse_slice(btoi))
+        .filter_map(|x| x.ok())
+        .and_then_(|_| end_line_crlf)
+        .and_then(|n| parse_bulk_str().repeat(n))
 }
 
 #[cfg(test)]
@@ -78,7 +61,7 @@ mod tests {
     #[test]
     fn test_check_array() {
         let a = check_array();
-        let pa = parse_array();
+        let pa = parse_array_str();
         let input = b"*3\r\n$3\r\nfoo\r\n$4\r\nbars\r\n$1\r\nx\r\n";
 
         println!("{:?}", pa.decode_all(&input[..]));
