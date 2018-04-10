@@ -1,7 +1,5 @@
-use bytes::Bytes;
-use std::convert::{AsRef, From, Into};
-use std::marker::PhantomData;
-use std::mem;
+use bytes::BytesMut;
+use std::convert::Into;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum DecodeError {
@@ -21,6 +19,26 @@ pub trait DecodeBytes: Sized {
         } else {
             Err(DecodeError::Fail)
         }
+    }
+    fn decode_buf(&self, buf: &mut BytesMut) -> Result<Option<Self::Output>, ::std::io::Error> {
+        let result;
+        let consumed: usize;
+
+        {
+            // borrow of buf inside here
+            let out = self.decode(buf.as_ref());
+            match out {
+                Ok((remainder, out)) => {
+                    consumed = buf.len() - remainder.len();
+                    result = Ok(Some(out));
+                }
+                Err(DecodeError::Incomplete) => return Ok(None),
+                _ => return Err(io_error!(InvalidData, "RESP DecodeError")),
+            }
+        }
+
+        buf.advance(consumed);
+        result
     }
 
     fn unwrap_fail<T>(self) -> UnwrapFail<Self>
