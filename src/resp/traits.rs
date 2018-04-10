@@ -14,9 +14,18 @@ pub trait DecodeBytes: Sized {
 
     fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError>;
 
-    fn unwrap_fail<T>(self) -> UnwrapFail<Self>
+    fn decode_all<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
+        let (remainder, out) = self.decode(bytes)?;
+        if remainder.len() == 0 {
+            Ok(out)
+        } else {
+            Err(DecodeError::Fail)
+        }
+    }
+
+    fn unwrap_fail<T, E>(self) -> UnwrapFail<Self>
     where
-        Self::Output: Into<Option<T>>,
+        Self::Output: Into<Result<T, E>>,
     {
         UnwrapFail { src: self.into() }
     }
