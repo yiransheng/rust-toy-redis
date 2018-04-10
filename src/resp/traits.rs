@@ -225,15 +225,13 @@ impl<D: DecodeBytes> DecodeBytes for Many_<D> {
     #[inline]
     fn decode(&self, bytes: &[u8]) -> Result<(usize, ()), DecodeError> {
         let total_len = bytes.len();
-        let mut bytes = bytes;
         let mut total_consumed = 0;
         loop {
+            let bytes = &bytes[total_consumed..];
             match self.one.decode(bytes) {
                 Ok((consumed, _)) => {
                     total_consumed += consumed;
-                    if total_len > total_consumed {
-                        bytes = &bytes[total_consumed..];
-                    } else {
+                    if total_len <= total_consumed {
                         return Err(DecodeError::Incomplete);
                     }
                 }
@@ -251,13 +249,19 @@ impl<D: DecodeBytes> DecodeBytes for Many<D> {
 
     #[inline]
     fn decode(&self, bytes: &[u8]) -> Result<(usize, Vec<D::Output>), DecodeError> {
+        let total_len = bytes.len();
         let mut total_consumed = 0;
         let mut results = vec![];
         loop {
+            let bytes = &bytes[total_consumed..];
             match self.one.decode(bytes) {
                 Ok((consumed, v)) => {
                     total_consumed += consumed;
-                    results.push(v)
+                    if total_len > total_consumed {
+                        results.push(v)
+                    } else {
+                        return Err(DecodeError::Incomplete);
+                    }
                 }
                 Err(DecodeError::Incomplete) => return Err(DecodeError::Incomplete),
                 _ => return Ok((total_consumed, results)),
@@ -275,16 +279,15 @@ impl<D: DecodeBytes> DecodeBytes for Repeat<D> {
     #[inline]
     fn decode(&self, bytes: &[u8]) -> Result<(usize, Vec<D::Output>), DecodeError> {
         let total_len = bytes.len();
-        let mut bytes = bytes;
         let mut total_consumed = 0;
         let mut results = vec![];
         for _ in 0..self.n {
-            bytes = &bytes[total_consumed..];
+            let bytes = &bytes[total_consumed..];
             match self.one.decode(bytes) {
                 Ok((consumed, v)) => {
                     total_consumed += consumed;
                     if total_len >= total_consumed {
-                        results.push(v)
+                        results.push(v);
                     } else {
                         return Err(DecodeError::Incomplete);
                     }
@@ -306,10 +309,9 @@ impl<D: DecodeBytes> DecodeBytes for Repeat_<D> {
     #[inline]
     fn decode(&self, bytes: &[u8]) -> Result<(usize, ()), DecodeError> {
         let total_len = bytes.len();
-        let mut bytes = bytes;
         let mut total_consumed = 0;
         for _ in 0..self.n {
-            bytes = &bytes[total_consumed..];
+            let bytes = &bytes[total_consumed..];
             match self.one.decode(bytes) {
                 Ok((consumed, v)) => {
                     total_consumed += consumed;
