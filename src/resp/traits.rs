@@ -51,7 +51,7 @@ pub trait DecodeBytes: Sized {
         UnwrapFail { src: self.into() }
     }
     #[inline]
-    fn count(self) -> BytesConsumed<Self> {
+    fn count_bytes(self) -> BytesConsumed<Self> {
         BytesConsumed { src: self }
     }
     #[inline]

@@ -91,16 +91,18 @@ impl Into<DecodeError> for ParseIntegerError {
     }
 }
 
-fn check_bulk() -> impl DecodeBytes<Output = ()> {
-    ExpectByte::new(b'$').and_then(|_| {
-        SafeByte
-            .many_()
-            .map_slice(|s| btoi(s).ok())
-            .unwrap_fail::<u64>()
-            .and_then_(|_| lineEnd)
-            .and_then(|n| AnyByte.repeat_(n))
-            .and_then_(|_| lineEnd)
-    })
+fn check_bulk() -> impl DecodeBytes<Output = usize> {
+    ExpectByte::new(b'$')
+        .and_then(|_| {
+            SafeByte
+                .many_()
+                .map_slice(|s| btoi(s).ok())
+                .unwrap_fail::<u64>()
+                .and_then_(|_| lineEnd)
+                .and_then(|n| AnyByte.repeat_(n))
+                .and_then_(|_| lineEnd)
+        })
+        .count_bytes()
 }
 fn parse_bulk() -> impl DecodeBytes<Output = String> {
     ExpectByte::new(b'$').and_then(|_| {
@@ -118,18 +120,20 @@ fn parse_bulk() -> impl DecodeBytes<Output = String> {
     })
 }
 
-fn check_array() -> impl DecodeBytes<Output = ()> {
-    ExpectByte::new(b'*').and_then(|_| {
-        SafeByte
-            .many_()
-            .map_slice(|s| btoi(s).ok())
-            .unwrap_fail::<u64>()
-            .and_then_(|_| lineEnd)
-            .and_then(|n| {
-                let bulk = check_bulk();
-                bulk.repeat_(n)
-            })
-    })
+fn check_array() -> impl DecodeBytes<Output = usize> {
+    ExpectByte::new(b'*')
+        .and_then(|_| {
+            SafeByte
+                .many_()
+                .map_slice(|s| btoi(s).ok())
+                .unwrap_fail::<u64>()
+                .and_then_(|_| lineEnd)
+                .and_then(|n| {
+                    let bulk = check_bulk();
+                    bulk.repeat_(n)
+                })
+        })
+        .count_bytes()
 }
 fn parse_array() -> impl DecodeBytes<Output = Vec<String>> {
     ExpectByte::new(b'*').and_then(|_| {
@@ -154,7 +158,7 @@ mod tests {
         let b = check_bulk();
         let input = b"$3\r\nfoo\r\n";
 
-        assert_eq!(b.decode_all(&input[..]), Ok(()));
+        assert_eq!(b.decode_all(&input[..]), Ok(input.len()));
     }
     #[test]
     fn test_check_array() {
@@ -164,7 +168,7 @@ mod tests {
 
         println!("{:?}", pa.decode_all(&input[..]));
 
-        assert_eq!(a.decode_all(&input[..]), Ok(()));
+        assert_eq!(a.decode_all(&input[..]), Ok(input.len()));
         assert_eq!(false, true);
     }
 }
