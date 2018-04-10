@@ -96,6 +96,14 @@ pub trait DecodeBytes: Sized {
         FlatMap_ { src: self, f }
     }
     #[inline]
+    fn and<B: DecodeBytes>(self, snd: B) -> AndNext<Self, B> {
+        AndNext { fst: self, snd }
+    }
+    #[inline]
+    fn and_<B: DecodeBytes>(self, snd: B) -> AndNext_<Self, B> {
+        AndNext_ { fst: self, snd }
+    }
+    #[inline]
     fn or<B: DecodeBytes<Output = Self::Output>>(self, other: B) -> Alternative<Self, B> {
         Alternative { a: self, b: other }
     }
@@ -263,6 +271,38 @@ where
         Ok((next_remainder, x))
     }
 }
+
+pub struct AndNext<A, B> {
+    fst: A,
+    snd: B,
+}
+impl<A: DecodeBytes, B: DecodeBytes> DecodeBytes for AndNext<A, B> {
+    type Output = B::Output;
+
+    #[inline]
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+        let (remainder, _) = self.fst.decode(bytes)?;
+
+        self.snd.decode(remainder)
+    }
+}
+pub struct AndNext_<A, B> {
+    fst: A,
+    snd: B,
+}
+impl<A: DecodeBytes, B: DecodeBytes> DecodeBytes for AndNext_<A, B> {
+    type Output = A::Output;
+
+    #[inline]
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+        let (remainder, fst_x) = self.fst.decode(bytes)?;
+
+        let (remainder, _) = self.snd.decode(remainder)?;
+
+        Ok((remainder, fst_x))
+    }
+}
+
 // Alternative
 pub struct Alternative<A, B> {
     a: A,
@@ -377,6 +417,7 @@ impl<D: DecodeBytes> DecodeBytes for Repeat_<D> {
         Ok((bytes, ()))
     }
 }
+
 pub enum Never {}
 pub struct Fail;
 
@@ -397,5 +438,60 @@ impl DecodeBytes for Halt {
     #[inline]
     fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Never), DecodeError> {
         Err(DecodeError::Incomplete)
+    }
+}
+
+pub struct ExpectByte {
+    byte: u8,
+}
+impl ExpectByte {
+    pub fn new(byte: u8) -> Self {
+        ExpectByte { byte }
+    }
+}
+
+impl DecodeBytes for ExpectByte {
+    type Output = u8;
+
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], u8), DecodeError> {
+        if bytes.len() == 0 {
+            return Err(DecodeError::Incomplete);
+        }
+
+        if bytes[0] == self.byte {
+            Ok((&bytes[1..], self.byte))
+        } else {
+            Err(DecodeError::Fail)
+        }
+    }
+}
+
+pub const end_line: ExpectByte = ExpectByte { byte: b'\n' };
+pub const end_line_crlf: ExpectBytes = ExpectBytes { bytes: b"\r\n" };
+
+pub struct ExpectBytes {
+    bytes: &'static [u8],
+}
+impl ExpectBytes {
+    pub fn new(bytes: &'static [u8]) -> Self {
+        ExpectBytes { bytes }
+    }
+}
+
+impl DecodeBytes for ExpectBytes {
+    type Output = &'static [u8];
+
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+        let expected_bytes = self.bytes;
+        let expected_len = expected_bytes.len();
+        if bytes.len() < expected_len {
+            return Err(DecodeError::Incomplete);
+        }
+
+        if &bytes[0..expected_len] == expected_bytes {
+            Ok((&bytes[expected_len..], self.bytes))
+        } else {
+            Err(DecodeError::Fail)
+        }
     }
 }

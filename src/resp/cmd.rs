@@ -3,56 +3,7 @@ use bytes::Bytes;
 use std::convert::{AsRef, From};
 use std::mem;
 
-use super::traits::{DecodeBytes, DecodeError};
-
-struct ExpectByte {
-    byte: u8,
-}
-impl ExpectByte {
-    fn new(byte: u8) -> Self {
-        ExpectByte { byte }
-    }
-}
-
-impl DecodeBytes for ExpectByte {
-    type Output = u8;
-
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], u8), DecodeError> {
-        if bytes.len() == 0 {
-            return Err(DecodeError::Incomplete);
-        }
-
-        if bytes[0] == self.byte {
-            Ok((&bytes[1..], self.byte))
-        } else {
-            Err(DecodeError::Fail)
-        }
-    }
-}
-
-const lineEnd: ExpectBytes = ExpectBytes { bytes: b"\r\n" };
-
-struct ExpectBytes {
-    bytes: &'static [u8],
-}
-
-impl DecodeBytes for ExpectBytes {
-    type Output = &'static [u8];
-
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
-        let expected_bytes = self.bytes;
-        let expected_len = expected_bytes.len();
-        if bytes.len() < expected_len {
-            return Err(DecodeError::Incomplete);
-        }
-
-        if &bytes[0..expected_len] == expected_bytes {
-            Ok((&bytes[expected_len..], self.bytes))
-        } else {
-            Err(DecodeError::Fail)
-        }
-    }
-}
+use super::traits::{end_line_crlf, DecodeBytes, DecodeError, ExpectByte};
 
 struct SafeByte;
 
@@ -98,26 +49,23 @@ fn check_bulk() -> impl DecodeBytes<Output = usize> {
                 .many_()
                 .parse_slice(|s| btoi(s))
                 .filter_map(|x| x.ok())
-                .and_then_(|_| lineEnd)
+                .and_then_(|_| end_line_crlf)
                 .and_then(|n| AnyByte.repeat_(n))
-                .and_then_(|_| lineEnd)
+                .and_then_(|_| end_line_crlf)
         })
         .count_bytes()
 }
 fn parse_bulk() -> impl DecodeBytes<Output = String> {
-    ExpectByte::new(b'$').and_then(|_| {
-        SafeByte
-            .many_()
-            .parse_slice(|s| btoi(s))
-            .filter_map(|x| x.ok())
-            .and_then_(|_| lineEnd)
-            .and_then(|n| {
-                AnyByte
-                    .repeat_(n)
-                    .parse_slice(|s| String::from_utf8(s.to_vec()).unwrap())
-            })
-            .and_then_(|_| lineEnd)
-    })
+    ExpectByte::new(b'$')
+        .and(SafeByte.many_().parse_slice(btoi))
+        .filter_map(|x| x.ok())
+        .and_then_(|_| end_line_crlf)
+        .and_then(|n| {
+            AnyByte
+                .repeat_(n)
+                .parse_slice(|s| String::from_utf8(s.to_vec()).unwrap())
+        })
+        .and_then_(|_| end_line_crlf)
 }
 
 pub fn check_array() -> impl DecodeBytes<Output = usize> {
@@ -127,7 +75,7 @@ pub fn check_array() -> impl DecodeBytes<Output = usize> {
                 .many_()
                 .parse_slice(|s| btoi(s))
                 .filter_map(|x| x.ok())
-                .and_then_(|_| lineEnd)
+                .and_then_(|_| end_line_crlf)
                 .and_then(|n| {
                     let bulk = check_bulk();
                     bulk.repeat_(n)
@@ -141,7 +89,7 @@ fn parse_array() -> impl DecodeBytes<Output = Vec<String>> {
             .many_()
             .parse_slice(|s| btoi(s))
             .filter_map(|x| x.ok())
-            .and_then_(|_| lineEnd)
+            .and_then_(|_| end_line_crlf)
             .and_then(|n| {
                 let bulk = parse_bulk();
                 bulk.repeat(n)
