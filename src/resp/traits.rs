@@ -13,6 +13,11 @@ pub trait DecodeBytes: Sized {
     fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError>;
 
     #[inline]
+    fn decode_<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
+        let (_, out) = self.decode(bytes)?;
+        Ok(out)
+    }
+    #[inline]
     fn decode_all<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
         let (remainder, out) = self.decode(bytes)?;
         if remainder.len() == 0 {

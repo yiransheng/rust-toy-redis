@@ -1,2 +1,2 @@
-mod cmd;
-mod traits;
+pub mod cmd;
+pub mod traits;

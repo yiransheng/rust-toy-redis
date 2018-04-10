@@ -1,8 +1,8 @@
-use std::sync::RwLock;
 use std::collections::HashMap;
+use std::sync::RwLock;
 
-use super::redis_value::{RedisValue, Value};
 use super::commands::Cmd;
+use super::redis_value::{RedisValue, Value};
 
 type Item = Vec<u8>;
 

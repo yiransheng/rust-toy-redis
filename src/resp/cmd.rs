@@ -120,7 +120,7 @@ fn parse_bulk() -> impl DecodeBytes<Output = String> {
     })
 }
 
-fn check_array() -> impl DecodeBytes<Output = usize> {
+pub fn check_array() -> impl DecodeBytes<Output = usize> {
     ExpectByte::new(b'*')
         .and_then(|_| {
             SafeByte

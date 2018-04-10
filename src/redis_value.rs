@@ -1,7 +1,7 @@
 use bytes::{BufMut, Bytes, BytesMut};
 use std::convert::{AsRef, From, Into};
-use std::str::{self, FromStr};
 use std::mem;
+use std::str::{self, FromStr};
 
 type Range = ::std::ops::Range<usize>;
 

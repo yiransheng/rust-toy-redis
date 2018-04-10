@@ -4,9 +4,9 @@ use std::sync::Arc;
 use futures::future;
 use tokio_service::Service;
 
+use super::commands::parse_command;
 use super::redis_value::{RedisValue, Value};
 use super::store::Store;
-use super::commands::parse_command;
 
 pub struct RedisService {
     store: Arc<Store>,

@@ -1,5 +1,5 @@
-use std::result;
 use super::redis_value::{Node, Value};
+use std::result;
 
 pub type Result<T> = result::Result<T, ParseError>;
 
