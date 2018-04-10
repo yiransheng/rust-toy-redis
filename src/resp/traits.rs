@@ -7,6 +7,7 @@ pub enum DecodeError {
     Fail,
 }
 
+// 'b represent the life time of slice passed to `decode`
 pub trait DecodeBytes<'b>: Sized {
     type Output;
 
@@ -57,6 +58,10 @@ pub trait DecodeBytes<'b>: Sized {
         F: Fn(&[u8]) -> B,
     {
         ParseSlice { src: self, f }
+    }
+    #[inline]
+    fn to_slice(self) -> ToSlice<Self> {
+        ToSlice { src: self }
     }
     #[inline]
     fn and_then<B, F>(self, f: F) -> FlatMap<Self, F>
@@ -184,6 +189,22 @@ where
             Some(x) => Ok((remainder, x)),
             _ => Err(DecodeError::Fail),
         }
+    }
+}
+
+pub struct ToSlice<D> {
+    src: D,
+}
+impl<'b, D: DecodeBytes<'b>> DecodeBytes<'b> for ToSlice<D> {
+    type Output = &'b [u8];
+
+    #[inline]
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+        let total_len = bytes.len();
+        let (remainder, _) = self.src.decode(bytes)?;
+        let slice = &bytes[..(total_len - remainder.len())];
+
+        Ok((remainder, slice))
     }
 }
 
