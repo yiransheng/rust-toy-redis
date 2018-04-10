@@ -1,3 +1,6 @@
+#![feature(conservative_impl_trait, universal_impl_trait)]
+
+extern crate btoi;
 extern crate bytes;
 #[macro_use]
 extern crate matches;
@@ -11,6 +14,7 @@ extern crate tokio_service;
 
 #[macro_use]
 mod macros;
+mod resp;
 mod redis_value;
 mod commands;
 mod store;
