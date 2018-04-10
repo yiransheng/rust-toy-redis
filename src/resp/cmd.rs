@@ -3,30 +3,13 @@ use bytes::Bytes;
 use std::convert::{AsRef, From};
 use std::str;
 
-use super::traits::{end_line_crlf, AnyByte, DecodeBytes, DecodeError, ExpectByte};
+use super::traits::{end_line_crlf, AnyByte, DecodeBytes, DecodeError, ExpectByte, LineSafeByte};
 
-struct SafeByte;
-
-impl<'b> DecodeBytes<'b> for SafeByte {
-    type Output = ();
-
-    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
-        if bytes.len() == 0 {
-            return Err(DecodeError::Incomplete);
-        }
-
-        match bytes[0] {
-            b'\r' => Err(DecodeError::Fail),
-            b'\n' => Err(DecodeError::Fail),
-            _ => Ok((&bytes[1..], ())),
-        }
-    }
-}
-
+#[inline]
 fn check_bulk<'b>() -> impl DecodeBytes<'b, Output = usize> {
     ExpectByte::new(b'$')
         .and_then(|_| {
-            SafeByte
+            LineSafeByte
                 .many_()
                 .parse_slice(|s| btoi(s))
                 .filter_map::<u64, _>(|x| x.ok())
@@ -36,9 +19,10 @@ fn check_bulk<'b>() -> impl DecodeBytes<'b, Output = usize> {
         })
         .count_bytes()
 }
+#[inline]
 fn parse_bulk<'b>() -> impl DecodeBytes<'b, Output = &'b str> {
     ExpectByte::new(b'$')
-        .and(SafeByte.many_().parse_slice(btoi))
+        .and(LineSafeByte.many_().parse_slice(btoi))
         .filter_map(|x| x.ok())
         .and_then_(|_| end_line_crlf)
         .and_then(|n| {
@@ -49,12 +33,13 @@ fn parse_bulk<'b>() -> impl DecodeBytes<'b, Output = &'b str> {
         .and_then_(|_| end_line_crlf)
 }
 
+#[inline]
 pub fn check_array<'b>() -> impl DecodeBytes<'b, Output = usize> {
     ExpectByte::new(b'*')
         .and_then(|_| {
-            SafeByte
+            LineSafeByte
                 .many_()
-                .parse_slice(|s| btoi(s))
+                .parse_slice(btoi)
                 .filter_map(|x| x.ok())
                 .and_then_(|_| end_line_crlf)
                 .and_then(|n| {
@@ -64,9 +49,10 @@ pub fn check_array<'b>() -> impl DecodeBytes<'b, Output = usize> {
         })
         .count_bytes()
 }
+#[inline]
 fn parse_array<'b>() -> impl DecodeBytes<'b, Output = Vec<&'b str>> {
     ExpectByte::new(b'*').and_then(|_| {
-        SafeByte
+        LineSafeByte
             .many_()
             .parse_slice(|s| btoi(s))
             .filter_map(|x| x.ok())

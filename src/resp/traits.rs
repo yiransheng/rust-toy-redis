@@ -441,6 +441,7 @@ pub struct ExpectByte {
     byte: u8,
 }
 impl ExpectByte {
+    #[inline]
     pub fn new(byte: u8) -> Self {
         ExpectByte { byte }
     }
@@ -449,6 +450,7 @@ impl ExpectByte {
 impl<'b> DecodeBytes<'b> for ExpectByte {
     type Output = u8;
 
+    #[inline]
     fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], u8), DecodeError> {
         if bytes.len() == 0 {
             return Err(DecodeError::Incomplete);
@@ -469,6 +471,7 @@ pub struct ExpectBytes {
     bytes: &'static [u8],
 }
 impl ExpectBytes {
+    #[inline]
     pub fn new(bytes: &'static [u8]) -> Self {
         ExpectBytes { bytes }
     }
@@ -477,6 +480,7 @@ impl ExpectBytes {
 impl<'b> DecodeBytes<'b> for ExpectBytes {
     type Output = &'static [u8];
 
+    #[inline]
     fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
         let expected_bytes = self.bytes;
         let expected_len = expected_bytes.len();
@@ -492,11 +496,31 @@ impl<'b> DecodeBytes<'b> for ExpectBytes {
     }
 }
 
+pub struct LineSafeByte;
+
+impl<'b> DecodeBytes<'b> for LineSafeByte {
+    type Output = ();
+
+    #[inline]
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+        if bytes.len() == 0 {
+            return Err(DecodeError::Incomplete);
+        }
+
+        match bytes[0] {
+            b'\r' => Err(DecodeError::Fail),
+            b'\n' => Err(DecodeError::Fail),
+            _ => Ok((&bytes[1..], ())),
+        }
+    }
+}
+
 pub struct AnyByte;
 
 impl<'b> DecodeBytes<'b> for AnyByte {
     type Output = ();
 
+    #[inline]
     fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
         if bytes.len() == 0 {
             return Err(DecodeError::Incomplete);
