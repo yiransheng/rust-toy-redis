@@ -23,9 +23,9 @@ pub trait DecodeBytes: Sized {
         }
     }
 
-    fn unwrap_fail<T, E>(self) -> UnwrapFail<Self>
+    fn unwrap_fail<T>(self) -> UnwrapFail<Self>
     where
-        Self::Output: Into<Result<T, E>>,
+        Self::Output: Into<Option<T>>,
     {
         UnwrapFail { src: self.into() }
     }
