@@ -7,45 +7,24 @@ pub enum DecodeError {
     Fail,
 }
 
-pub trait DecodeBytes: Sized {
+pub trait DecodeBytes<'b>: Sized {
     type Output;
 
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError>;
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError>;
 
     #[inline]
-    fn decode_<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
+    fn decode_<'a>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
         let (_, out) = self.decode(bytes)?;
         Ok(out)
     }
     #[inline]
-    fn decode_all<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
+    fn decode_all<'a>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
         let (remainder, out) = self.decode(bytes)?;
         if remainder.len() == 0 {
             Ok(out)
         } else {
             Err(DecodeError::Fail)
         }
-    }
-    #[inline]
-    fn decode_buf(&self, buf: &mut BytesMut) -> Result<Option<Self::Output>, ::std::io::Error> {
-        let result;
-        let consumed: usize;
-
-        {
-            // borrow of buf inside here
-            let out = self.decode(buf.as_ref());
-            match out {
-                Ok((remainder, out)) => {
-                    consumed = buf.len() - remainder.len();
-                    result = Ok(Some(out));
-                }
-                Err(DecodeError::Incomplete) => return Ok(None),
-                _ => return Err(io_error!(InvalidData, "RESP DecodeError")),
-            }
-        }
-
-        buf.advance(consumed);
-        result
     }
     #[inline]
     fn count_bytes(self) -> BytesConsumed<Self> {
@@ -82,7 +61,7 @@ pub trait DecodeBytes: Sized {
     #[inline]
     fn and_then<B, F>(self, f: F) -> FlatMap<Self, F>
     where
-        B: DecodeBytes,
+        B: DecodeBytes<'b>,
         F: Fn(Self::Output) -> B,
     {
         FlatMap { src: self, f }
@@ -90,21 +69,21 @@ pub trait DecodeBytes: Sized {
     #[inline]
     fn and_then_<B, F>(self, f: F) -> FlatMap_<Self, F>
     where
-        B: DecodeBytes,
+        B: DecodeBytes<'b>,
         F: Fn(&Self::Output) -> B,
     {
         FlatMap_ { src: self, f }
     }
     #[inline]
-    fn and<B: DecodeBytes>(self, snd: B) -> AndNext<Self, B> {
+    fn and<B: DecodeBytes<'b>>(self, snd: B) -> AndNext<Self, B> {
         AndNext { fst: self, snd }
     }
     #[inline]
-    fn and_<B: DecodeBytes>(self, snd: B) -> AndNext_<Self, B> {
+    fn and_<B: DecodeBytes<'b>>(self, snd: B) -> AndNext_<Self, B> {
         AndNext_ { fst: self, snd }
     }
     #[inline]
-    fn or<B: DecodeBytes<Output = Self::Output>>(self, other: B) -> Alternative<Self, B> {
+    fn or<B: DecodeBytes<'b, Output = Self::Output>>(self, other: B) -> Alternative<Self, B> {
         Alternative { a: self, b: other }
     }
     #[inline]
@@ -125,37 +104,14 @@ pub trait DecodeBytes: Sized {
     }
 }
 
-pub struct FilterMap<D, F> {
-    src: D,
-    f: F,
-}
-impl<T, D, F> DecodeBytes for FilterMap<D, F>
-where
-    D: DecodeBytes,
-    F: Fn(D::Output) -> Option<T>,
-{
-    type Output = T;
-
-    #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], T), DecodeError> {
-        let (remainder, r) = self.src.decode(bytes)?;
-        let f = &self.f;
-
-        match f(r) {
-            Some(x) => Ok((remainder, x)),
-            _ => Err(DecodeError::Fail),
-        }
-    }
-}
-
 pub struct BytesConsumed<D> {
     src: D,
 }
-impl<D: DecodeBytes> DecodeBytes for BytesConsumed<D> {
+impl<'b, D: DecodeBytes<'b>> DecodeBytes<'b> for BytesConsumed<D> {
     type Output = usize;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], usize), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], usize), DecodeError> {
         let total_len = bytes.len();
         let (remainder, _) = self.src.decode(bytes)?;
 
@@ -167,15 +123,15 @@ pub struct Filter<D, F> {
     src: D,
     f: F,
 }
-impl<D, F> DecodeBytes for Filter<D, F>
+impl<'b, D, F> DecodeBytes<'b> for Filter<D, F>
 where
-    D: DecodeBytes,
+    D: DecodeBytes<'b>,
     F: Fn(&D::Output) -> bool,
 {
     type Output = D::Output;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
         let (remainder, x) = self.src.decode(bytes)?;
         let f = &self.f;
 
@@ -193,32 +149,56 @@ pub struct Map<D, F> {
     f: F,
 }
 
-impl<B, D: DecodeBytes, F> DecodeBytes for Map<D, F>
+impl<'b, B, D: DecodeBytes<'b>, F> DecodeBytes<'b> for Map<D, F>
 where
     F: Fn(D::Output) -> B,
 {
     type Output = B;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], B), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], B), DecodeError> {
         let (remainder, x) = self.src.decode(bytes)?;
         let f = &self.f;
 
         Ok((remainder, f(x)))
     }
 }
+
+pub struct FilterMap<D, F> {
+    src: D,
+    f: F,
+}
+impl<'b, T, D, F> DecodeBytes<'b> for FilterMap<D, F>
+where
+    D: DecodeBytes<'b>,
+    F: Fn(D::Output) -> Option<T>,
+{
+    type Output = T;
+
+    #[inline]
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], T), DecodeError> {
+        let (remainder, r) = self.src.decode(bytes)?;
+        let f = &self.f;
+
+        match f(r) {
+            Some(x) => Ok((remainder, x)),
+            _ => Err(DecodeError::Fail),
+        }
+    }
+}
+
 pub struct ParseSlice<D, F> {
     src: D,
     f: F,
 }
-impl<B, D: DecodeBytes, F> DecodeBytes for ParseSlice<D, F>
+impl<'b, B, D: DecodeBytes<'b>, F> DecodeBytes<'b> for ParseSlice<D, F>
 where
     F: Fn(&[u8]) -> B,
 {
     type Output = B;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], B), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], B), DecodeError> {
         let total_len = bytes.len();
         let (remainder, _) = self.src.decode(bytes)?;
         let slice = &bytes[..(total_len - remainder.len())];
@@ -227,20 +207,21 @@ where
         Ok((remainder, f(slice)))
     }
 }
+
 // Monad
 pub struct FlatMap<D, F> {
     src: D,
     f: F,
 }
 
-impl<B: DecodeBytes, D: DecodeBytes, F> DecodeBytes for FlatMap<D, F>
+impl<'b, B: DecodeBytes<'b>, D: DecodeBytes<'b>, F> DecodeBytes<'b> for FlatMap<D, F>
 where
     F: Fn(D::Output) -> B,
 {
     type Output = B::Output;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], B::Output), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], B::Output), DecodeError> {
         let (remainder, x) = self.src.decode(bytes)?;
         let f = &self.f;
 
@@ -254,14 +235,14 @@ pub struct FlatMap_<D, F> {
     f: F,
 }
 
-impl<B: DecodeBytes, D: DecodeBytes, F> DecodeBytes for FlatMap_<D, F>
+impl<'b, B: DecodeBytes<'b>, D: DecodeBytes<'b>, F> DecodeBytes<'b> for FlatMap_<D, F>
 where
     F: Fn(&D::Output) -> B,
 {
     type Output = D::Output;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], D::Output), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], D::Output), DecodeError> {
         let (remainder, x) = self.src.decode(bytes)?;
         let f = &self.f;
 
@@ -276,11 +257,11 @@ pub struct AndNext<A, B> {
     fst: A,
     snd: B,
 }
-impl<A: DecodeBytes, B: DecodeBytes> DecodeBytes for AndNext<A, B> {
+impl<'b, A: DecodeBytes<'b>, B: DecodeBytes<'b>> DecodeBytes<'b> for AndNext<A, B> {
     type Output = B::Output;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
         let (remainder, _) = self.fst.decode(bytes)?;
 
         self.snd.decode(remainder)
@@ -290,11 +271,11 @@ pub struct AndNext_<A, B> {
     fst: A,
     snd: B,
 }
-impl<A: DecodeBytes, B: DecodeBytes> DecodeBytes for AndNext_<A, B> {
+impl<'b, A: DecodeBytes<'b>, B: DecodeBytes<'b>> DecodeBytes<'b> for AndNext_<A, B> {
     type Output = A::Output;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
         let (remainder, fst_x) = self.fst.decode(bytes)?;
 
         let (remainder, _) = self.snd.decode(remainder)?;
@@ -308,15 +289,15 @@ pub struct Alternative<A, B> {
     a: A,
     b: B,
 }
-impl<A, B> DecodeBytes for Alternative<A, B>
+impl<'b, A, B> DecodeBytes<'b> for Alternative<A, B>
 where
-    A: DecodeBytes,
-    B: DecodeBytes<Output = A::Output>,
+    A: DecodeBytes<'b>,
+    B: DecodeBytes<'b, Output = A::Output>,
 {
     type Output = A::Output;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], A::Output), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], A::Output), DecodeError> {
         match self.a.decode(bytes) {
             Err(DecodeError::Fail) => self.b.decode(bytes),
             x @ _ => x,
@@ -326,11 +307,11 @@ where
 pub struct Many_<D> {
     one: D,
 }
-impl<D: DecodeBytes> DecodeBytes for Many_<D> {
+impl<'b, D: DecodeBytes<'b>> DecodeBytes<'b> for Many_<D> {
     type Output = ();
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], ()), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], ()), DecodeError> {
         let mut bytes = bytes;
         loop {
             match self.one.decode(bytes) {
@@ -346,14 +327,11 @@ impl<D: DecodeBytes> DecodeBytes for Many_<D> {
 pub struct Many<D> {
     one: D,
 }
-impl<D: DecodeBytes> DecodeBytes for Many<D> {
+impl<'b, D: DecodeBytes<'b>> DecodeBytes<'b> for Many<D> {
     type Output = Vec<D::Output>;
 
     #[inline]
-    fn decode<'a, 'b>(
-        &'a self,
-        bytes: &'b [u8],
-    ) -> Result<(&'b [u8], Vec<D::Output>), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Vec<D::Output>), DecodeError> {
         let mut results = vec![];
         let mut bytes = bytes;
         loop {
@@ -372,14 +350,11 @@ pub struct Repeat<D> {
     one: D,
     n: u64,
 }
-impl<D: DecodeBytes> DecodeBytes for Repeat<D> {
+impl<'b, D: DecodeBytes<'b>> DecodeBytes<'b> for Repeat<D> {
     type Output = Vec<D::Output>;
 
     #[inline]
-    fn decode<'a, 'b>(
-        &'a self,
-        bytes: &'b [u8],
-    ) -> Result<(&'b [u8], Vec<D::Output>), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Vec<D::Output>), DecodeError> {
         let mut results = vec![];
         let mut bytes = bytes;
         for _ in 0..self.n {
@@ -399,11 +374,11 @@ pub struct Repeat_<D> {
     one: D,
     n: u64,
 }
-impl<D: DecodeBytes> DecodeBytes for Repeat_<D> {
+impl<'b, D: DecodeBytes<'b>> DecodeBytes<'b> for Repeat_<D> {
     type Output = ();
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], ()), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], ()), DecodeError> {
         let mut bytes = bytes;
         for _ in 0..self.n {
             match self.one.decode(bytes) {
@@ -421,22 +396,22 @@ impl<D: DecodeBytes> DecodeBytes for Repeat_<D> {
 pub enum Never {}
 pub struct Fail;
 
-impl DecodeBytes for Fail {
+impl<'b> DecodeBytes<'b> for Fail {
     type Output = Never;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Never), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Never), DecodeError> {
         Err(DecodeError::Fail)
     }
 }
 
 pub struct Halt;
 
-impl DecodeBytes for Halt {
+impl<'b> DecodeBytes<'b> for Halt {
     type Output = Never;
 
     #[inline]
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Never), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Never), DecodeError> {
         Err(DecodeError::Incomplete)
     }
 }
@@ -450,10 +425,10 @@ impl ExpectByte {
     }
 }
 
-impl DecodeBytes for ExpectByte {
+impl<'b> DecodeBytes<'b> for ExpectByte {
     type Output = u8;
 
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], u8), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], u8), DecodeError> {
         if bytes.len() == 0 {
             return Err(DecodeError::Incomplete);
         }
@@ -478,10 +453,10 @@ impl ExpectBytes {
     }
 }
 
-impl DecodeBytes for ExpectBytes {
+impl<'b> DecodeBytes<'b> for ExpectBytes {
     type Output = &'static [u8];
 
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
         let expected_bytes = self.bytes;
         let expected_len = expected_bytes.len();
         if bytes.len() < expected_len {
@@ -498,10 +473,10 @@ impl DecodeBytes for ExpectBytes {
 
 pub struct AnyByte;
 
-impl DecodeBytes for AnyByte {
+impl<'b> DecodeBytes<'b> for AnyByte {
     type Output = ();
 
-    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
         if bytes.len() == 0 {
             return Err(DecodeError::Incomplete);
         }
