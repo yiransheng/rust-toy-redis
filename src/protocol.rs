@@ -7,8 +7,6 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_proto::pipeline::ServerProto;
 
 use super::redis_value::RedisValue;
-use super::resp::cmd::check_array;
-use super::resp::traits::{DecodeBytes, DecodeError};
 
 pub struct RedisCodec;
 
@@ -19,14 +17,6 @@ impl Decoder for RedisCodec {
     type Error = io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<RedisValue>, io::Error> {
-        let checker = check_array();
-
-        match checker.decode_(buf.as_ref()) {
-            Ok(_) => {}
-            Err(DecodeError::Incomplete) => return Ok(None),
-            _ => io_fail!(InvalidData, "RESP decode Error Caught"),
-        }
-
         RedisValue::decode(&*buf)
             .map(|redis_val| {
                 match redis_val {

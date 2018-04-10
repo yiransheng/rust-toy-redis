@@ -96,8 +96,8 @@ fn check_bulk() -> impl DecodeBytes<Output = usize> {
         .and_then(|_| {
             SafeByte
                 .many_()
-                .map_slice(|s| btoi(s).ok())
-                .unwrap_fail::<u64>()
+                .parse_slice(|s| btoi(s))
+                .filter_map(|x| x.ok())
                 .and_then_(|_| lineEnd)
                 .and_then(|n| AnyByte.repeat_(n))
                 .and_then_(|_| lineEnd)
@@ -108,13 +108,13 @@ fn parse_bulk() -> impl DecodeBytes<Output = String> {
     ExpectByte::new(b'$').and_then(|_| {
         SafeByte
             .many_()
-            .map_slice(|s| btoi(s).ok())
-            .unwrap_fail::<u64>()
+            .parse_slice(|s| btoi(s))
+            .filter_map(|x| x.ok())
             .and_then_(|_| lineEnd)
             .and_then(|n| {
                 AnyByte
                     .repeat_(n)
-                    .map_slice(|s| String::from_utf8(s.to_vec()).unwrap())
+                    .parse_slice(|s| String::from_utf8(s.to_vec()).unwrap())
             })
             .and_then_(|_| lineEnd)
     })
@@ -125,8 +125,8 @@ pub fn check_array() -> impl DecodeBytes<Output = usize> {
         .and_then(|_| {
             SafeByte
                 .many_()
-                .map_slice(|s| btoi(s).ok())
-                .unwrap_fail::<u64>()
+                .parse_slice(|s| btoi(s))
+                .filter_map(|x| x.ok())
                 .and_then_(|_| lineEnd)
                 .and_then(|n| {
                     let bulk = check_bulk();
@@ -139,8 +139,8 @@ fn parse_array() -> impl DecodeBytes<Output = Vec<String>> {
     ExpectByte::new(b'*').and_then(|_| {
         SafeByte
             .many_()
-            .map_slice(|s| btoi(s).ok())
-            .unwrap_fail::<u64>()
+            .parse_slice(|s| btoi(s))
+            .filter_map(|x| x.ok())
             .and_then_(|_| lineEnd)
             .and_then(|n| {
                 let bulk = parse_bulk();

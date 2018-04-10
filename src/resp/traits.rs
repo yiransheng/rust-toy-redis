@@ -47,17 +47,23 @@ pub trait DecodeBytes: Sized {
         buf.advance(consumed);
         result
     }
-
-    #[inline]
-    fn unwrap_fail<T>(self) -> UnwrapFail<Self>
-    where
-        Self::Output: Into<Option<T>>,
-    {
-        UnwrapFail { src: self.into() }
-    }
     #[inline]
     fn count_bytes(self) -> BytesConsumed<Self> {
         BytesConsumed { src: self }
+    }
+    #[inline]
+    fn filter_map<T, F>(self, f: F) -> FilterMap<Self, F>
+    where
+        F: Fn(Self::Output) -> Option<T>,
+    {
+        FilterMap { src: self, f }
+    }
+    #[inline]
+    fn filter<B, F>(self, f: F) -> Filter<Self, F>
+    where
+        F: Fn(&Self::Output) -> bool,
+    {
+        Filter { src: self, f }
     }
     #[inline]
     fn map<B, F>(self, f: F) -> Map<Self, F>
@@ -67,11 +73,11 @@ pub trait DecodeBytes: Sized {
         Map { src: self, f }
     }
     #[inline]
-    fn map_slice<B, F>(self, f: F) -> MapSlice<Self, F>
+    fn parse_slice<B, F>(self, f: F) -> ParseSlice<Self, F>
     where
         F: Fn(&[u8]) -> B,
     {
-        MapSlice { src: self, f }
+        ParseSlice { src: self, f }
     }
     #[inline]
     fn and_then<B, F>(self, f: F) -> FlatMap<Self, F>
@@ -111,20 +117,23 @@ pub trait DecodeBytes: Sized {
     }
 }
 
-pub struct UnwrapFail<D> {
+pub struct FilterMap<D, F> {
     src: D,
+    f: F,
 }
-impl<T, D> DecodeBytes for UnwrapFail<D>
+impl<T, D, F> DecodeBytes for FilterMap<D, F>
 where
-    D: DecodeBytes<Output = Option<T>>,
+    D: DecodeBytes,
+    F: Fn(D::Output) -> Option<T>,
 {
     type Output = T;
 
     #[inline]
     fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], T), DecodeError> {
         let (remainder, r) = self.src.decode(bytes)?;
+        let f = &self.f;
 
-        match r {
+        match f(r) {
             Some(x) => Ok((remainder, x)),
             _ => Err(DecodeError::Fail),
         }
@@ -143,6 +152,30 @@ impl<D: DecodeBytes> DecodeBytes for BytesConsumed<D> {
         let (remainder, _) = self.src.decode(bytes)?;
 
         Ok((remainder, total_len - remainder.len()))
+    }
+}
+
+pub struct Filter<D, F> {
+    src: D,
+    f: F,
+}
+impl<D, F> DecodeBytes for Filter<D, F>
+where
+    D: DecodeBytes,
+    F: Fn(&D::Output) -> bool,
+{
+    type Output = D::Output;
+
+    #[inline]
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
+        let (remainder, x) = self.src.decode(bytes)?;
+        let f = &self.f;
+
+        if f(&x) {
+            Ok((remainder, x))
+        } else {
+            Err(DecodeError::Fail)
+        }
     }
 }
 
@@ -166,11 +199,11 @@ where
         Ok((remainder, f(x)))
     }
 }
-pub struct MapSlice<D, F> {
+pub struct ParseSlice<D, F> {
     src: D,
     f: F,
 }
-impl<B, D: DecodeBytes, F> DecodeBytes for MapSlice<D, F>
+impl<B, D: DecodeBytes, F> DecodeBytes for ParseSlice<D, F>
 where
     F: Fn(&[u8]) -> B,
 {
