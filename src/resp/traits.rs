@@ -55,7 +55,7 @@ pub trait DecodeBytes<'b>: Sized {
     #[inline]
     fn parse_slice<B, F>(self, f: F) -> ParseSlice<Self, F>
     where
-        F: Fn(&[u8]) -> B,
+        F: Fn(&'b [u8]) -> B,
     {
         ParseSlice { src: self, f }
     }
@@ -214,7 +214,7 @@ pub struct ParseSlice<D, F> {
 }
 impl<'b, B, D: DecodeBytes<'b>, F> DecodeBytes<'b> for ParseSlice<D, F>
 where
-    F: Fn(&[u8]) -> B,
+    F: Fn(&'b [u8]) -> B,
 {
     type Output = B;
 
