@@ -1,6 +1,7 @@
 use bytes::Bytes;
-use std::mem;
 use std::convert::{AsRef, From, Into};
+use std::marker::PhantomData;
+use std::mem;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum DecodeError {
@@ -11,7 +12,7 @@ pub enum DecodeError {
 pub trait DecodeBytes: Sized {
     type Output;
 
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, Self::Output), DecodeError>;
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError>;
 
     fn unwrap_fail<T>(self) -> UnwrapFail<Self>
     where
@@ -19,7 +20,6 @@ pub trait DecodeBytes: Sized {
     {
         UnwrapFail { src: self.into() }
     }
-
     fn count(self) -> BytesConsumed<Self> {
         BytesConsumed { src: self }
     }
@@ -76,11 +76,11 @@ where
     type Output = T;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, T), DecodeError> {
-        let (consumed, r) = self.src.decode(bytes)?;
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], T), DecodeError> {
+        let (remainder, r) = self.src.decode(bytes)?;
 
         match r {
-            Some(x) => Ok((consumed, x)),
+            Some(x) => Ok((remainder, x)),
             _ => Err(DecodeError::Fail),
         }
     }
@@ -93,10 +93,11 @@ impl<D: DecodeBytes> DecodeBytes for BytesConsumed<D> {
     type Output = usize;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, usize), DecodeError> {
-        let (consumed, _) = self.src.decode(bytes)?;
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], usize), DecodeError> {
+        let total_len = bytes.len();
+        let (remainder, _) = self.src.decode(bytes)?;
 
-        Ok((consumed, consumed))
+        Ok((remainder, total_len - remainder.len()))
     }
 }
 
@@ -113,14 +114,13 @@ where
     type Output = B;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, B), DecodeError> {
-        let (consumed, x) = self.src.decode(bytes)?;
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], B), DecodeError> {
+        let (remainder, x) = self.src.decode(bytes)?;
         let f = &self.f;
 
-        Ok((consumed, f(x)))
+        Ok((remainder, f(x)))
     }
 }
-
 pub struct MapSlice<D, F> {
     src: D,
     f: F,
@@ -132,15 +132,15 @@ where
     type Output = B;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, B), DecodeError> {
-        let (consumed, _) = self.src.decode(bytes)?;
-        let slice = &bytes[0..consumed];
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], B), DecodeError> {
+        let total_len = bytes.len();
+        let (remainder, _) = self.src.decode(bytes)?;
+        let slice = &bytes[..(total_len - remainder.len())];
         let f = &self.f;
 
-        Ok((consumed, f(slice)))
+        Ok((remainder, f(slice)))
     }
 }
-
 // Monad
 pub struct FlatMap<D, F> {
     src: D,
@@ -154,18 +154,13 @@ where
     type Output = B::Output;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, B::Output), DecodeError> {
-        let (consumed, x) = self.src.decode(bytes)?;
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], B::Output), DecodeError> {
+        let (remainder, x) = self.src.decode(bytes)?;
         let f = &self.f;
 
         let next = f(x);
-        let bytes_len = bytes.len();
-        if bytes_len > consumed {
-            let (next_consumed, o) = next.decode(&bytes[consumed..])?;
-            Ok((consumed + next_consumed, o))
-        } else {
-            Err(DecodeError::Incomplete)
-        }
+        let (next_remainder, o) = next.decode(remainder)?;
+        Ok((next_remainder, o))
     }
 }
 pub struct FlatMap_<D, F> {
@@ -180,21 +175,16 @@ where
     type Output = D::Output;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, D::Output), DecodeError> {
-        let (consumed, x) = self.src.decode(bytes)?;
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], D::Output), DecodeError> {
+        let (remainder, x) = self.src.decode(bytes)?;
         let f = &self.f;
 
         let next = f(&x);
-        let bytes_len = bytes.len();
-        if bytes_len > consumed {
-            let (next_consumed, o) = next.decode(&bytes[consumed..])?;
-            Ok((consumed + next_consumed, x))
-        } else {
-            Err(DecodeError::Incomplete)
-        }
+
+        let (next_remainder, _) = next.decode(remainder)?;
+        Ok((next_remainder, x))
     }
 }
-
 // Alternative
 pub struct Alternative<A, B> {
     a: A,
@@ -208,14 +198,13 @@ where
     type Output = A::Output;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, A::Output), DecodeError> {
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], A::Output), DecodeError> {
         match self.a.decode(bytes) {
             Err(DecodeError::Fail) => self.b.decode(bytes),
             x @ _ => x,
         }
     }
 }
-
 pub struct Many_<D> {
     one: D,
 }
@@ -223,20 +212,15 @@ impl<D: DecodeBytes> DecodeBytes for Many_<D> {
     type Output = ();
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, ()), DecodeError> {
-        let total_len = bytes.len();
-        let mut total_consumed = 0;
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], ()), DecodeError> {
+        let mut bytes = bytes;
         loop {
-            let bytes = &bytes[total_consumed..];
             match self.one.decode(bytes) {
-                Ok((consumed, _)) => {
-                    total_consumed += consumed;
-                    if total_len <= total_consumed {
-                        return Err(DecodeError::Incomplete);
-                    }
+                Ok((remainder, _)) => {
+                    bytes = remainder;
                 }
                 Err(DecodeError::Incomplete) => return Err(DecodeError::Incomplete),
-                _ => return Ok((total_consumed, ())),
+                _ => return Ok((bytes, ())),
             }
         }
     }
@@ -248,23 +232,20 @@ impl<D: DecodeBytes> DecodeBytes for Many<D> {
     type Output = Vec<D::Output>;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, Vec<D::Output>), DecodeError> {
-        let total_len = bytes.len();
-        let mut total_consumed = 0;
+    fn decode<'a, 'b>(
+        &'a self,
+        bytes: &'b [u8],
+    ) -> Result<(&'b [u8], Vec<D::Output>), DecodeError> {
         let mut results = vec![];
+        let mut bytes = bytes;
         loop {
-            let bytes = &bytes[total_consumed..];
             match self.one.decode(bytes) {
-                Ok((consumed, v)) => {
-                    total_consumed += consumed;
-                    if total_len > total_consumed {
-                        results.push(v)
-                    } else {
-                        return Err(DecodeError::Incomplete);
-                    }
+                Ok((remainder, v)) => {
+                    results.push(v);
+                    bytes = remainder;
                 }
                 Err(DecodeError::Incomplete) => return Err(DecodeError::Incomplete),
-                _ => return Ok((total_consumed, results)),
+                _ => return Ok((bytes, results)),
             }
         }
     }
@@ -277,26 +258,23 @@ impl<D: DecodeBytes> DecodeBytes for Repeat<D> {
     type Output = Vec<D::Output>;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, Vec<D::Output>), DecodeError> {
-        let total_len = bytes.len();
-        let mut total_consumed = 0;
+    fn decode<'a, 'b>(
+        &'a self,
+        bytes: &'b [u8],
+    ) -> Result<(&'b [u8], Vec<D::Output>), DecodeError> {
         let mut results = vec![];
+        let mut bytes = bytes;
         for _ in 0..self.n {
-            let bytes = &bytes[total_consumed..];
             match self.one.decode(bytes) {
-                Ok((consumed, v)) => {
-                    total_consumed += consumed;
-                    if total_len >= total_consumed {
-                        results.push(v);
-                    } else {
-                        return Err(DecodeError::Incomplete);
-                    }
+                Ok((remainder, v)) => {
+                    results.push(v);
+                    bytes = remainder;
                 }
                 Err(DecodeError::Incomplete) => return Err(DecodeError::Incomplete),
                 _ => return Err(DecodeError::Fail),
             }
         }
-        Ok((total_consumed, results))
+        Ok((bytes, results))
     }
 }
 pub struct Repeat_<D> {
@@ -307,26 +285,20 @@ impl<D: DecodeBytes> DecodeBytes for Repeat_<D> {
     type Output = ();
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, ()), DecodeError> {
-        let total_len = bytes.len();
-        let mut total_consumed = 0;
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], ()), DecodeError> {
+        let mut bytes = bytes;
         for _ in 0..self.n {
-            let bytes = &bytes[total_consumed..];
             match self.one.decode(bytes) {
-                Ok((consumed, v)) => {
-                    total_consumed += consumed;
-                    if total_len < total_consumed {
-                        return Err(DecodeError::Incomplete);
-                    }
+                Ok((remainder, _)) => {
+                    bytes = remainder;
                 }
                 Err(DecodeError::Incomplete) => return Err(DecodeError::Incomplete),
                 _ => return Err(DecodeError::Fail),
             }
         }
-        Ok((total_consumed, ()))
+        Ok((bytes, ()))
     }
 }
-
 pub enum Never {}
 pub struct Fail;
 
@@ -334,7 +306,7 @@ impl DecodeBytes for Fail {
     type Output = Never;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, Never), DecodeError> {
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Never), DecodeError> {
         Err(DecodeError::Fail)
     }
 }
@@ -345,7 +317,7 @@ impl DecodeBytes for Halt {
     type Output = Never;
 
     #[inline]
-    fn decode(&self, bytes: &[u8]) -> Result<(usize, Never), DecodeError> {
+    fn decode<'a, 'b>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Never), DecodeError> {
         Err(DecodeError::Incomplete)
     }
 }
