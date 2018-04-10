@@ -161,7 +161,7 @@ mod tests {
     fn test_check_array() {
         let a = check_array();
         let pa = parse_array();
-        let input = b"*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n";
+        let input = b"*3\r\n$3\r\nfoo\r\n$3\r\nbar\r\n";
 
         println!("{:?}", pa.decode(&input[..]));
 
