@@ -3,26 +3,26 @@ use bytes::Bytes;
 use std::convert::{AsRef, From};
 use std::str;
 
-use super::traits::{end_line_crlf, AnyByte, DecodeBytes, DecodeError, ExpectByte, LineSafeByte};
+use super::traits::{any_byte, end_line_crlf, line_safe_byte, match_byte, DecodeBytes, DecodeError};
 
 #[inline]
 fn check_bulk<'b>() -> impl DecodeBytes<'b, Output = usize> {
-    ExpectByte::new(b'$')
-        .and(LineSafeByte.many_().parse_slice(btoi))
+    match_byte(b'$')
+        .and(line_safe_byte.many_().parse_slice(btoi))
         .filter_map(|x| x.ok())
         .and_(end_line_crlf)
-        .and_then(|n| AnyByte.repeat_(n))
+        .and_then(|n| any_byte.repeat_(n))
         .and_(end_line_crlf)
         .count_bytes()
 }
 #[inline]
 fn parse_bulk_str<'b>() -> impl DecodeBytes<'b, Output = &'b str> {
-    ExpectByte::new(b'$')
-        .and(LineSafeByte.many_().parse_slice(btoi))
+    match_byte(b'$')
+        .and(line_safe_byte.many_().parse_slice(btoi))
         .filter_map(|x| x.ok())
         .and_(end_line_crlf)
         .and_then(|n| {
-            AnyByte
+            any_byte
                 .repeat_(n)
                 .parse_slice(|s| str::from_utf8(s).unwrap())
         })
@@ -31,8 +31,8 @@ fn parse_bulk_str<'b>() -> impl DecodeBytes<'b, Output = &'b str> {
 
 #[inline]
 pub fn check_array<'b>() -> impl DecodeBytes<'b, Output = usize> {
-    ExpectByte::new(b'*')
-        .and(LineSafeByte.many_().parse_slice(btoi))
+    match_byte(b'*')
+        .and(line_safe_byte.many_().parse_slice(btoi))
         .filter_map(|x| x.ok())
         .and_then_(|_| end_line_crlf)
         .and_then(|n| check_bulk().repeat_(n))
@@ -40,8 +40,8 @@ pub fn check_array<'b>() -> impl DecodeBytes<'b, Output = usize> {
 }
 #[inline]
 fn parse_array_str<'b>() -> impl DecodeBytes<'b, Output = Vec<&'b str>> {
-    ExpectByte::new(b'*')
-        .and(LineSafeByte.many_().parse_slice(btoi))
+    match_byte(b'*')
+        .and(line_safe_byte.many_().parse_slice(btoi))
         .filter_map(|x| x.ok())
         .and_then_(|_| end_line_crlf)
         .and_then(|n| parse_bulk_str().repeat(n))

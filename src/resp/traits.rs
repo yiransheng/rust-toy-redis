@@ -437,14 +437,11 @@ impl<'b> DecodeBytes<'b> for Halt {
     }
 }
 
-pub struct ExpectByte {
-    byte: u8,
-}
-impl ExpectByte {
-    #[inline]
-    pub fn new(byte: u8) -> Self {
-        ExpectByte { byte }
-    }
+pub struct ExpectByte(u8);
+
+#[inline]
+pub fn match_byte(byte: u8) -> ExpectByte {
+    ExpectByte(byte)
 }
 
 impl<'b> DecodeBytes<'b> for ExpectByte {
@@ -456,25 +453,23 @@ impl<'b> DecodeBytes<'b> for ExpectByte {
             return Err(DecodeError::Incomplete);
         }
 
-        if bytes[0] == self.byte {
-            Ok((&bytes[1..], self.byte))
+        if bytes[0] == self.0 {
+            Ok((&bytes[1..], self.0))
         } else {
             Err(DecodeError::Fail)
         }
     }
 }
 
-pub const end_line: ExpectByte = ExpectByte { byte: b'\n' };
+pub const end_line: ExpectByte = ExpectByte(b'\n');
 pub const end_line_crlf: ExpectBytes = ExpectBytes { bytes: b"\r\n" };
 
 pub struct ExpectBytes {
     bytes: &'static [u8],
 }
-impl ExpectBytes {
-    #[inline]
-    pub fn new(bytes: &'static [u8]) -> Self {
-        ExpectBytes { bytes }
-    }
+#[inline]
+pub fn match_bytes(bytes: &'static [u8]) -> ExpectBytes {
+    ExpectBytes { bytes }
 }
 
 impl<'b> DecodeBytes<'b> for ExpectBytes {
@@ -496,9 +491,9 @@ impl<'b> DecodeBytes<'b> for ExpectBytes {
     }
 }
 
-pub struct LineSafeByte;
+pub struct line_safe_byte;
 
-impl<'b> DecodeBytes<'b> for LineSafeByte {
+impl<'b> DecodeBytes<'b> for line_safe_byte {
     type Output = ();
 
     #[inline]
@@ -515,9 +510,9 @@ impl<'b> DecodeBytes<'b> for LineSafeByte {
     }
 }
 
-pub struct AnyByte;
+pub struct any_byte;
 
-impl<'b> DecodeBytes<'b> for AnyByte {
+impl<'b> DecodeBytes<'b> for any_byte {
     type Output = ();
 
     #[inline]
