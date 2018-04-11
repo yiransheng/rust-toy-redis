@@ -92,6 +92,14 @@ pub trait DecodeBytes<'b>: Sized {
         Alternative { a: self, b: other }
     }
     #[inline]
+    fn or_else<B, F>(self, f: F) -> OrElse<Self, F>
+    where
+        B: DecodeBytes<'b, Output = Self::Output>,
+        F: Fn() -> B,
+    {
+        OrElse { a: self, f }
+    }
+    #[inline]
     fn many_(self) -> Many_<Self> {
         Many_ { one: self }
     }
@@ -325,6 +333,30 @@ where
         }
     }
 }
+
+// Lazy Alternative
+pub struct OrElse<A, F> {
+    a: A,
+    f: F,
+}
+impl<'b, A, B, F> DecodeBytes<'b> for OrElse<A, F>
+where
+    A: DecodeBytes<'b>,
+    B: DecodeBytes<'b, Output = A::Output>,
+    F: Fn() -> B,
+{
+    type Output = A::Output;
+
+    #[inline]
+    fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], A::Output), DecodeError> {
+        let f = &self.f;
+        match self.a.decode(bytes) {
+            Err(DecodeError::Fail) => f().decode(bytes),
+            x @ _ => x,
+        }
+    }
+}
+
 pub struct Many_<D> {
     one: D,
 }
@@ -415,9 +447,9 @@ impl<'b, D: DecodeBytes<'b>> DecodeBytes<'b> for Repeat_<D> {
 }
 
 pub enum Never {}
-pub struct Fail;
+pub struct fail;
 
-impl<'b> DecodeBytes<'b> for Fail {
+impl<'b> DecodeBytes<'b> for fail {
     type Output = Never;
 
     #[inline]
@@ -513,7 +545,7 @@ impl<'b> DecodeBytes<'b> for line_safe_byte {
 pub struct any_byte;
 
 impl<'b> DecodeBytes<'b> for any_byte {
-    type Output = ();
+    type Output = u8;
 
     #[inline]
     fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError> {
@@ -521,6 +553,6 @@ impl<'b> DecodeBytes<'b> for any_byte {
             return Err(DecodeError::Incomplete);
         }
 
-        Ok((&bytes[1..], ()))
+        Ok((&bytes[1..], bytes[0]))
     }
 }
