@@ -1,6 +1,3 @@
-use bytes::BytesMut;
-use std::convert::Into;
-
 #[derive(Debug, Eq, PartialEq)]
 pub enum DecodeError {
     Incomplete,
@@ -9,17 +6,49 @@ pub enum DecodeError {
 
 fn _assert_is_object_safe(_: &DecodeBytes<Output = ()>) {}
 
-/// An interface for builder parser combinators operating on a borrowed bytes slice.
+/// An interface for building decoders operating on a borrowed bytes slice.
+///
+/// Inspired by [monadic parser combinators] common in Haskell, and tries to follow
+/// conventions established by [`std::iter::Iterator`].
+///
+/// This trait is generic over lifetime `'b`, which represents the lifetime
+/// of borrowed `&[u8]` its `decode` method operates on. This allows associated
+/// `Output` type to be references of this lifetime, for example produce a
+/// sub-slice of the input as output.
+///
+/// [monadic parser combinators]: http://www.cs.nott.ac.uk/~pszgmh/monparsing.pdf
 pub trait DecodeBytes<'b> {
+    /// The type of value produced by a decoder
     type Output;
 
+    /// Decode a sequence of bytes, return a tuple of (remaining bytes, output) if successful.
+    ///
+    /// # Examples
+    ///
+    /// Basic usages:
+    ///
+    /// ```
+    /// let input = b"hello, world";
+    /// let decoder = match_bytes(b"hello"); // implements DecodeBytes
+    ///
+    /// assert_eq!(
+    ///     decoder.decode(&input[..]),
+    ///     Ok((&b", world"[..], &b"hello"[..]))
+    /// );
+    ///
+    /// ```
+    ///
+    /// #Errors
     fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError>;
 
+    /// Decode bytes, discard remainder and only return [Ok(`Self::Output`)] if successful.
     #[inline]
     fn decode_<'a>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
         let (_, out) = self.decode(bytes)?;
         Ok(out)
     }
+
+    /// Similar to [`decode_`], but fails if input bytes is not consumed entirely.
     #[inline]
     fn decode_all<'a>(&'a self, bytes: &'b [u8]) -> Result<Self::Output, DecodeError> {
         let (remainder, out) = self.decode(bytes)?;
@@ -29,6 +58,26 @@ pub trait DecodeBytes<'b> {
             Err(DecodeError::Fail)
         }
     }
+
+    /// Creates an DecodeBytes whose output is the number of bytes consumed by `self`.
+    ///
+    /// Created DecodeBytes behaves exactly like the current one, accept/fail identically
+    /// on the same input - except it will report number of bytes consumed and discard
+    /// the result of `self` when running on some inputs.
+    ///
+    /// # Examples
+    ///
+    ///
+    /// ```
+    /// let input = b"foo";
+    /// let decoder = match_bytes(b"foo").count_bytes();
+    ///
+    /// assert_eq!(
+    ///     decoder.decode_all(&input[..]),
+    ///     Ok(3)
+    /// );
+    ///
+    /// ```
     #[inline]
     fn count_bytes(self) -> BytesConsumed<Self>
     where
