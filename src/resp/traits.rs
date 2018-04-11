@@ -7,8 +7,10 @@ pub enum DecodeError {
     Fail,
 }
 
-// 'b represent the life time of slice passed to `decode`
-pub trait DecodeBytes<'b>: Sized {
+fn _assert_is_object_safe(_: &DecodeBytes<Output = ()>) {}
+
+/// An interface for builder parser combinators operating on a borrowed bytes slice.
+pub trait DecodeBytes<'b> {
     type Output;
 
     fn decode<'a>(&'a self, bytes: &'b [u8]) -> Result<(&'b [u8], Self::Output), DecodeError>;
@@ -28,13 +30,17 @@ pub trait DecodeBytes<'b>: Sized {
         }
     }
     #[inline]
-    fn count_bytes(self) -> BytesConsumed<Self> {
+    fn count_bytes(self) -> BytesConsumed<Self>
+    where
+        Self: Sized,
+    {
         BytesConsumed { src: self }
     }
     #[inline]
     fn filter_map<T, F>(self, f: F) -> FilterMap<Self, F>
     where
         F: Fn(Self::Output) -> Option<T>,
+        Self: Sized,
     {
         FilterMap { src: self, f }
     }
@@ -42,6 +48,7 @@ pub trait DecodeBytes<'b>: Sized {
     fn filter<B, F>(self, f: F) -> Filter<Self, F>
     where
         F: Fn(&Self::Output) -> bool,
+        Self: Sized,
     {
         Filter { src: self, f }
     }
@@ -49,6 +56,7 @@ pub trait DecodeBytes<'b>: Sized {
     fn map<B, F>(self, f: F) -> Map<Self, F>
     where
         F: Fn(Self::Output) -> B,
+        Self: Sized,
     {
         Map { src: self, f }
     }
@@ -56,11 +64,15 @@ pub trait DecodeBytes<'b>: Sized {
     fn parse_slice<B, F>(self, f: F) -> ParseSlice<Self, F>
     where
         F: Fn(&'b [u8]) -> B,
+        Self: Sized,
     {
         ParseSlice { src: self, f }
     }
     #[inline]
-    fn to_slice(self) -> ToSlice<Self> {
+    fn to_consumed_slice(self) -> ToSlice<Self>
+    where
+        Self: Sized,
+    {
         ToSlice { src: self }
     }
     #[inline]
@@ -68,6 +80,7 @@ pub trait DecodeBytes<'b>: Sized {
     where
         B: DecodeBytes<'b>,
         F: Fn(Self::Output) -> B,
+        Self: Sized,
     {
         FlatMap { src: self, f }
     }
@@ -76,19 +89,29 @@ pub trait DecodeBytes<'b>: Sized {
     where
         B: DecodeBytes<'b>,
         F: Fn(&Self::Output) -> B,
+        Self: Sized,
     {
         FlatMap_ { src: self, f }
     }
     #[inline]
-    fn and<B: DecodeBytes<'b>>(self, snd: B) -> AndNext<Self, B> {
+    fn and<B: DecodeBytes<'b>>(self, snd: B) -> AndNext<Self, B>
+    where
+        Self: Sized,
+    {
         AndNext { fst: self, snd }
     }
     #[inline]
-    fn and_<B: DecodeBytes<'b>>(self, snd: B) -> AndNext_<Self, B> {
+    fn and_<B: DecodeBytes<'b>>(self, snd: B) -> AndNext_<Self, B>
+    where
+        Self: Sized,
+    {
         AndNext_ { fst: self, snd }
     }
     #[inline]
-    fn or<B: DecodeBytes<'b, Output = Self::Output>>(self, other: B) -> Alternative<Self, B> {
+    fn or<B: DecodeBytes<'b, Output = Self::Output>>(self, other: B) -> Alternative<Self, B>
+    where
+        Self: Sized,
+    {
         Alternative { a: self, b: other }
     }
     #[inline]
@@ -96,23 +119,36 @@ pub trait DecodeBytes<'b>: Sized {
     where
         B: DecodeBytes<'b, Output = Self::Output>,
         F: Fn() -> B,
+        Self: Sized,
     {
         OrElse { a: self, f }
     }
     #[inline]
-    fn many_(self) -> Many_<Self> {
+    fn many_(self) -> Many_<Self>
+    where
+        Self: Sized,
+    {
         Many_ { one: self }
     }
     #[inline]
-    fn many(self) -> Many<Self> {
+    fn many(self) -> Many<Self>
+    where
+        Self: Sized,
+    {
         Many { one: self }
     }
     #[inline]
-    fn repeat(self, n: u64) -> Repeat<Self> {
+    fn repeat(self, n: u64) -> Repeat<Self>
+    where
+        Self: Sized,
+    {
         Repeat { one: self, n }
     }
     #[inline]
-    fn repeat_(self, n: u64) -> Repeat_<Self> {
+    fn repeat_(self, n: u64) -> Repeat_<Self>
+    where
+        Self: Sized,
+    {
         Repeat_ { one: self, n }
     }
 }
