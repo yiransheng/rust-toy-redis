@@ -2,6 +2,7 @@
 
 extern crate btoi;
 extern crate bytes;
+extern crate bytes_decoder;
 #[macro_use]
 extern crate matches;
 #[macro_use]

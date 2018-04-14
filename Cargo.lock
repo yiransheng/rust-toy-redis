@@ -34,6 +34,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "bytes-decoder"
+version = "0.1.0"
+source = "git+https://github.com/yiransheng/bytes_decoder#b5a84460a580d73ac67af806050e3118f43694fa"
+
+[[package]]
 name = "cfg-if"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -410,6 +415,7 @@ version = "0.1.2"
 dependencies = [
  "btoi 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes-decoder 0.1.0 (git+https://github.com/yiransheng/bytes_decoder)",
  "futures 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "matches 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -464,6 +470,7 @@ dependencies = [
 "checksum btoi 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8d15ecfe509efcb62cee526041279141acecfb1e2269fd1990d6990e84d88399"
 "checksum byteorder 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "73b5bdfe7ee3ad0b99c9801d58807a9dbc9e09196365b0203853b99889ab3c87"
 "checksum bytes 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)" = "1b7db437d718977f6dc9b2e3fd6fc343c02ac6b899b73fdd2179163447bd9ce9"
+"checksum bytes-decoder 0.1.0 (git+https://github.com/yiransheng/bytes_decoder)" = "<none>"
 "checksum cfg-if 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d4c819a1287eb618df47cc647173c5c4c66ba19d888a6e50d605672aed3140de"
 "checksum crossbeam-deque 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c1bdc73742c36f7f35ebcda81dbb33a7e0d33757d03a06d9ddca762712ec5ea2"
 "checksum crossbeam-epoch 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "9b4e2817eb773f770dcb294127c011e22771899c21d18fce7dd739c0b9832e81"
