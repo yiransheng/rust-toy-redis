@@ -1,2 +1,4 @@
-pub mod cmd;
-pub mod traits;
+pub mod command;
+pub mod decode;
+
+pub use self::command::Arguments;

@@ -1,42 +1,40 @@
 use std::io;
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
+use bytes_decoder::{Decode, DecodeError};
 
 use tokio_io::codec::{Decoder, Encoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_proto::pipeline::ServerProto;
 
 use super::redis_value::RedisValue;
+use super::resp::decode::{check_array, decode_array};
+use super::resp::Arguments;
 
 pub struct RedisCodec;
 
 pub struct RedisProto;
 
 impl Decoder for RedisCodec {
-    type Item = RedisValue;
+    type Item = Arguments<Bytes>;
     type Error = io::Error;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<RedisValue>, io::Error> {
-        RedisValue::decode(&*buf)
-            .map(|redis_val| {
-                match redis_val {
-                    Some((consumed, x)) => {
-                        // This is super Important!
-                        //
-                        // For a tokio Codec, returning Ok<Some<Item>> alone
-                        // is not sufficient to tell the framework this Frame
-                        // is Completed.
-                        //
-                        // There's a reason decode takes a &mut BytesMute, I
-                        // guess, the Frame completes only if the buffer is
-                        // drained fully, so it seems.
-                        buf.advance(consumed);
-                        Some(x)
-                    }
-                    None => None,
-                }
-            })
-            .map_err(|_| io_error!(InvalidData, "RESP decode Error"))
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
+        let checker = check_array();
+        let bytes = buf.as_ref();
+
+        let n_bytes = checker.decode_(bytes);
+
+        match n_bytes {
+            Err(DecodeError::Incomplete) => return Ok(None),
+            Err(DecodeError::Fail) => io_fail!(InvalidData, "RESP decode Error"),
+            Ok(consumed) => {
+                let bytes = buf.split_to(consumed).as_ref();
+                // checker ensures decoding will succeed
+                let args = decode_array(bytes).unwrap();
+                Ok(Some(args))
+            }
+        }
     }
 }
 
@@ -52,7 +50,7 @@ impl Encoder for RedisCodec {
 }
 
 impl<T: AsyncRead + AsyncWrite + 'static> ServerProto<T> for RedisProto {
-    type Request = RedisValue;
+    type Request = Arguments<Bytes>;
     type Response = RedisValue;
 
     type Transport = Framed<T, RedisCodec>;

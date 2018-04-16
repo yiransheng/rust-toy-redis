@@ -2,8 +2,11 @@ use btoi::{btoi, ParseIntegerError};
 use std::convert::{AsRef, From};
 use std::str;
 
+use bytes::Bytes;
 use bytes_decoder::primitives::*;
 use bytes_decoder::{Decode, DecodeError};
+
+use super::command::Arguments;
 
 #[inline]
 fn check_bulk<'b>() -> impl Decode<'b, Output = usize> {
@@ -25,6 +28,34 @@ pub fn check_array<'b>() -> impl Decode<'b, Output = usize> {
         .and_then_(|_| BytesExact::new("\r\n".as_bytes()))
         .and_then(|n| check_bulk().repeat_(n))
         .bytes_consumed()
+}
+
+#[inline]
+fn decode_bulk<'b>() -> impl Decode<'b, Output = &'b [u8]> {
+    let end_line_crlf: BytesExact = BytesExact::new("\r\n".as_bytes());
+    Byte::new(b'$')
+        .and(ByteLineSafe.many_().parse_slice(btoi))
+        .filter_map(|x| x.ok())
+        .and_(end_line_crlf)
+        .and_then(|n| ByteAny.repeat_(n))
+        .and_(end_line_crlf)
+        .to_consumed_slice()
+}
+#[inline]
+pub fn decode_array<'b>(bytes: &'b [u8]) -> Result<Arguments<Bytes>, DecodeError> {
+    let end_line_crlf: BytesExact = BytesExact::new("\r\n".as_bytes());
+
+    let decoder = Byte::new(b'*')
+        .and(ByteLineSafe.many_().parse_slice(btoi))
+        .filter_map(|x| x.ok())
+        .and_then_(|_| BytesExact::new("\r\n".as_bytes()))
+        .and_then(|n| {
+            decode_bulk().reduce_repeat::<Arguments<&'b [u8]>, _>(n, |args, s| args.append(s))
+        });
+
+    let args = decoder.decode_exact(bytes)?;
+
+    Ok(args.to_bytes())
 }
 
 #[cfg(test)]
