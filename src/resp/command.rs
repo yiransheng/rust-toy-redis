@@ -119,9 +119,12 @@ impl<'a> Arguments<&'a [u8]> {
         let n = self.n_bytes();
         let mut bytes = Bytes::with_capacity(n);
         let args: Arguments<_> = self.iter()
-            .scan((0, 0), |(_start, end), s| {
+            .scan((0, 0), |st, s| {
                 bytes.extend_from_slice(s);
-                Some((*end, *end + s.len()))
+                let (_, end) = *st;
+                st.0 = end;
+                st.1 = end + s.len();
+                Some(*st)
             })
             .collect();
 
