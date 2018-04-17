@@ -48,7 +48,7 @@ impl Value {
                 for v in vs {
                     queue.push_back(v);
                 }
-                cursor = EncodeItem::Prefixed(b'*', vs.len());
+                cursor = EncodeItem::Prefix(b'*', vs.len());
             }
             _ => {
                 queue.push_back(self);
@@ -71,7 +71,7 @@ impl Value {
             Status(_) => EncodeItem::Enclosed(b'-', None, self),
             Int(n) => EncodeItem::Enclosed(b':', None, self),
             Data(ref xs) => EncodeItem::Enclosed(b'$', Some(xs.len()), self),
-            Array(ref vs) => EncodeItem::Prefixed(b'*', vs.len()),
+            Array(ref vs) => EncodeItem::Prefix(b'*', vs.len()),
         }
     }
     fn as_value_slice(&self) -> Cow<[u8]> {
@@ -90,14 +90,14 @@ impl Value {
 pub enum EncodeItem<'a> {
     Done,
     Static(&'static [u8]),
-    Prefixed(u8, usize),
+    Prefix(u8, usize),
     Enclosed(u8, Option<usize>, &'a Value),
 }
 impl<'a> EncodeItem<'a> {
     pub fn encode(self, buf: &mut BytesMut) {
         match self {
             EncodeItem::Static(s) => buf.put(s),
-            EncodeItem::Prefixed(p, c) => {
+            EncodeItem::Prefix(p, c) => {
                 buf.put(p);
                 buf.put(format!("{}\r\n", c));
             }
@@ -116,7 +116,7 @@ impl<'a> EncodeItem<'a> {
     pub fn encoding_len(&self) -> usize {
         match *self {
             EncodeItem::Static(s) => s.len(),
-            EncodeItem::Prefixed(p, c) => 3 + count_digits(c as i64),
+            EncodeItem::Prefix(p, c) => 3 + count_digits(c as i64),
             EncodeItem::Enclosed(p, c, v) => {
                 let mut n = 1;
                 if let Some(c) = c {
