@@ -136,7 +136,15 @@ pub struct EncodeIter<'a> {
     cursor: EncodeItem<'a>,
     values: VecDeque<&'a Value>,
 }
+impl<'a> Iterator for EncodeIter<'a> {
+    type Item = EncodeItem<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pop_item()
+    }
+}
 impl<'a> EncodeIter<'a> {
+    #[inline]
     fn pop_item(&mut self) -> Option<EncodeItem<'a>> {
         match self.cursor {
             EncodeItem::Done => {}
@@ -169,14 +177,6 @@ impl<'a> EncodeIter<'a> {
     }
 }
 
-impl<'a> Iterator for EncodeIter<'a> {
-    type Item = EncodeItem<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.pop_item()
-    }
-}
-
 fn count_digits(mut v: i64) -> usize {
     // negative sign
     let mut result = if v < 0 { 2 } else { 1 };
@@ -203,12 +203,9 @@ fn count_digits(mut v: i64) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str;
 
     #[test]
     fn test_encode() {
-        let mut buf = BytesMut::with_capacity(1024);
-
         let values = Value::Array(vec![
             Value::Okay,
             Value::Okay,
@@ -225,15 +222,14 @@ mod tests {
             Value::Nil,
         ]);
 
+        let mut buf = BytesMut::with_capacity(value.encoding_len());
+
+        let expected = b"*4\r\n$12\r\nhello world!\r\n*5\r\n+Ok\r\n+Ok\r\n*1\r\n$-1\r\n:32\r\n*0\r\n-err\r\n$-1\r\n";
+
         for item in value.encoding_iter() {
-            println!("{:?}", item);
-            println!("Item Len: {}", item.encoding_len());
             item.encode(&mut buf);
         }
-        println!("Len: {}", value.encoding_len());
-        println!("Actual Len: {}", buf.as_ref().len());
-        println!("{}", str::from_utf8(buf.as_ref()).unwrap());
 
-        assert!(false);
+        assert_eq!(buf.as_ref(), &expected[..]);
     }
 }
