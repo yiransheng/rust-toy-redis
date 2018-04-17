@@ -9,8 +9,11 @@ matches = "0.1.6"
 
 lazy_static = "1.0"
 bytes = "0.4.6"
+btoi = "0.3.0"
 futures = "0.1"
 tokio-io = "0.1"
 tokio-core = "0.1"
 tokio-proto = "0.1"
 tokio-service = "0.1"
+
+bytes-decoder = { git = "https://github.com/yiransheng/bytes_decoder" }

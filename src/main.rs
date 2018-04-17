@@ -1,6 +1,6 @@
+extern crate btoi;
 extern crate bytes;
-#[macro_use]
-extern crate matches;
+extern crate bytes_decoder;
 extern crate stringreader;
 
 extern crate futures;
@@ -11,18 +11,17 @@ extern crate tokio_service;
 
 #[macro_use]
 mod macros;
-mod redis_value;
-mod commands;
-mod store;
 mod protocol;
+mod resp;
 mod service;
+mod store;
 
 use std::sync::Arc;
 use tokio_proto::TcpServer;
 
 use protocol::RedisProto;
-use store::Store;
 use service::RedisService;
+use store::Store;
 
 fn main() {
     // Specify the localhost address
