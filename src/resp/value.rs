@@ -26,7 +26,7 @@ impl Value {
         }
     }
 
-    pub fn iter(&self) -> ValueIter {
+    pub fn encoding_iter(&self) -> ValueIter {
         use self::Value::*;
 
         match *self {
@@ -34,14 +34,17 @@ impl Value {
             Okey => ValueIter::Simple("+Ok\r\n".as_bytes()),
             Status(ref s) => ValueIter::Simple(s.as_bytes()),
             Int(n) => ValueIter::Simple(format!("{}", n).as_bytes()),
-            Data(ref xs) => ValueIter::Simple(&xs[..]),
+            Data(ref xs) => {
+                let prefix = format!("${}\r\n", xs.len()).as_bytes();
+                ValueIter::Prefixed(prefix, &xs[..])
+            }
             Array(ref vs) => {
                 if vs.len() == 0 {
-                    ValueIter::Done
+                    ValueIter::Simple("*0\r\n".as_bytes())
                 } else {
                     ValueIter::Array {
-                        curr: &vs[0].iter(),
-                        values: &vs[1..],
+                        curr: &ValueIter::Simple(format!("*{}\r\n", vs.len()).as_bytes()),
+                        values: &vs[..],
                     }
                 }
             }
@@ -52,6 +55,7 @@ impl Value {
 pub enum ValueIter<'a> {
     Done,
     Simple(&'a [u8]),
+    Prefixed(&'a [u8], &'a [u8]),
     Array {
         curr: &'a ValueIter<'a>,
         values: &'a [Value],
@@ -70,6 +74,10 @@ impl<'a> Iterator for ValueIter<'a> {
         match iter {
             Done => ret = None,
             Simple(s) => ret = Some(s),
+            Prefixed(p, s) => {
+                ret = Some(p);
+                mem::replace(self, ValueIter::Simple(s));
+            }
             Array {
                 mut curr,
                 mut values,
@@ -80,7 +88,7 @@ impl<'a> Iterator for ValueIter<'a> {
                             // Attention: early return here
                             return None;
                         }
-                        curr = &values[0].iter();
+                        curr = &values[0].encoding_iter();
                         values = &values[1..];
                     }
                     _ => {}
