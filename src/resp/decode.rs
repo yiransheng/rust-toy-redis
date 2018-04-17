@@ -37,14 +37,11 @@ fn decode_bulk<'b>() -> impl Decode<'b, Output = &'b [u8]> {
         .and(ByteLineSafe.many_().parse_slice(btoi))
         .filter_map(|x| x.ok())
         .and_(end_line_crlf)
-        .and_then(|n| ByteAny.repeat_(n))
+        .and_then(|n| ByteAny.repeat_(n).to_consumed_slice())
         .and_(end_line_crlf)
-        .to_consumed_slice()
 }
 #[inline]
 pub fn decode_array<'b>(bytes: &'b [u8]) -> Result<Arguments<Bytes>, DecodeError> {
-    let end_line_crlf: BytesExact = BytesExact::new("\r\n".as_bytes());
-
     let decoder = Byte::new(b'*')
         .and(ByteLineSafe.many_().parse_slice(btoi))
         .filter_map(|x| x.ok())
@@ -76,12 +73,16 @@ mod tests {
             .and_(end_line_crlf)
     }
     fn parse_array_str<'b>() -> impl Decode<'b, Output = Vec<&'b str>> {
-        let end_line_crlf: BytesExact = BytesExact::new("\r\n".as_bytes());
         Byte::new(b'*')
             .and(ByteLineSafe.many_().parse_slice(btoi))
             .filter_map(|x| x.ok())
             .and_then_(|_| BytesExact::new("\r\n".as_bytes()))
-            .and_then(|n| parse_bulk_str().repeat(n))
+            .and_then(|n| {
+                parse_bulk_str().reduce_repeat::<Vec<&'b str>, _>(n, |mut acc, s| {
+                    acc.push(s);
+                    acc
+                })
+            })
     }
 
     #[test]

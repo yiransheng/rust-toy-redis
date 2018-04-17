@@ -28,18 +28,16 @@ use std::sync::Arc;
 use tokio_proto::TcpServer;
 
 use protocol::RedisProto;
-// use service::RedisService;
+use service::RedisService;
 use store::Store;
 
 fn main() {
-    /*
-     *     // Specify the localhost address
-     *     let addr = "127.0.0.1:6379".parse().unwrap();
-     *
-     *     // The builder requires a protocol and an address
-     *     let server = TcpServer::new(RedisProto, addr);
-     *     let store = Arc::new(Store::new());
-     *
-     *     server.serve(move || Ok(RedisService::new(store.clone())));
-     */
+    // Specify the localhost address
+    let addr = "127.0.0.1:6379".parse().unwrap();
+
+    // The builder requires a protocol and an address
+    let server = TcpServer::new(RedisProto, addr);
+    let store = Arc::new(Store::new());
+
+    server.serve(move || Ok(RedisService::new(store.clone())));
 }
