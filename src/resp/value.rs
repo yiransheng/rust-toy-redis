@@ -212,6 +212,7 @@ mod tests {
         let values = Value::Array(vec![
             Value::Okay,
             Value::Okay,
+            Value::Array(vec![Value::Nil]),
             Value::Int(32),
             Value::Array(vec![]),
         ]);
