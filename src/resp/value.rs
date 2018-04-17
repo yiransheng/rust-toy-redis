@@ -77,6 +77,7 @@ impl<'a> Iterator for ValueIter<'a> {
                 match curr {
                     Done => {
                         if values.len() == 0 {
+                            // Attention: early return here
                             return None;
                         }
                         curr = &values[0].iter();
@@ -89,6 +90,7 @@ impl<'a> Iterator for ValueIter<'a> {
                 mem::replace(self, ValueIter::Array { curr, values });
             }
         }
+
         ret
     }
 }
