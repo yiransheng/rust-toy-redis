@@ -1,6 +1,6 @@
 use std::io;
 
-use bytes::{Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use bytes_decoder::{Decode, DecodeError};
 
 use tokio_io::codec::{Decoder, Encoder, Framed};
@@ -9,7 +9,7 @@ use tokio_proto::pipeline::ServerProto;
 
 use super::redis_value::RedisValue;
 use super::resp::decode::{check_array, decode_array};
-use super::resp::Arguments;
+use super::resp::{Arguments, Value};
 
 pub struct RedisCodec;
 
@@ -39,11 +39,15 @@ impl Decoder for RedisCodec {
 }
 
 impl Encoder for RedisCodec {
-    type Item = RedisValue;
+    type Item = Value;
     type Error = io::Error;
 
-    fn encode(&mut self, msg: RedisValue, buf: &mut BytesMut) -> io::Result<()> {
-        msg.encode(buf);
+    fn encode(&mut self, msg: Value, buf: &mut BytesMut) -> io::Result<()> {
+        buf.reserve(msg.n_bytes());
+
+        for slice in msg.iter() {
+            buf.put(slice)
+        }
 
         Ok(())
     }
@@ -51,7 +55,7 @@ impl Encoder for RedisCodec {
 
 impl<T: AsyncRead + AsyncWrite + 'static> ServerProto<T> for RedisProto {
     type Request = Arguments<Bytes>;
-    type Response = RedisValue;
+    type Response = Value;
 
     type Transport = Framed<T, RedisCodec>;
     type BindTransport = Result<Self::Transport, io::Error>;
