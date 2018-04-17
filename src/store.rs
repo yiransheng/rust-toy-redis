@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use super::commands::Cmd;
-use super::redis_value::{RedisValue, Value};
+use super::resp::{Cmd, Value};
 
 type Item = Vec<u8>;
 
@@ -16,27 +15,28 @@ impl Store {
             store: RwLock::new(HashMap::new()),
         }
     }
-    pub fn run_command<T: AsRef<[u8]>>(&self, cmd: Cmd<Value<T>>) -> RedisValue {
+    pub fn run_command<T: AsRef<[u8]>>(&self, cmd: Cmd<T>) -> Value {
         match cmd {
             Cmd::GET { key } => {
                 let store = self.store.read().unwrap();
-                let value = store.get(key.as_slice());
-                let value = value.map_or(Value::Nil, |s| Value::from_slice(s));
-                RedisValue::from_value(value)
+                let value = store.get(key.as_ref());
+                let value = value.map_or(Value::Nil, |s| Value::Data(s.to_vec()));
+
+                value
             }
             Cmd::DEL { keys } => {
                 let mut store = self.store.write().unwrap();
                 let deleted: usize = (&keys)
                     .iter()
-                    .map(|k| store.remove(k.as_slice()).map_or(0, |_| 1))
+                    .map(|k| store.remove(k.as_ref()).map_or(0, |_| 1))
                     .sum();
 
-                RedisValue::from_value(Value::from_integer(deleted as i64))
+                Value::Int(deleted as i64)
             }
             Cmd::SET { key, value } => {
                 let mut store = self.store.write().unwrap();
-                store.insert(key.as_slice().to_vec(), value.as_slice().to_vec());
-                RedisValue::ok()
+                store.insert(key.as_ref().to_vec(), value.as_ref().to_vec());
+                Value::Okay
             }
         }
     }

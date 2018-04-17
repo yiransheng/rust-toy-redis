@@ -2,7 +2,42 @@ use bytes::{Bytes, BytesMut};
 use std::default::Default;
 use std::iter::FromIterator;
 use std::mem;
-use std::ops::Range;
+
+#[derive(Debug)]
+pub enum Cmd<T> {
+    SET { key: T, value: T },
+    GET { key: T },
+    DEL { keys: Arguments<T> },
+}
+impl Cmd<Bytes> {
+    pub fn from_args(args: Arguments<Bytes>) -> Option<Self> {
+        let cmd = args.first();
+        match cmd {
+            Some(arg) if arg.as_ref() == b"GET" => {
+                if let Arguments::Two((_, ref key)) = args {
+                    Some(Cmd::GET { key: key.clone() })
+                } else {
+                    None
+                }
+            }
+            Some(arg) if arg.as_ref() == b"DEL" => {
+                let keys: Arguments<Bytes> = args.iter().skip(1).map(|key| key.clone()).collect();
+                Some(Cmd::DEL { keys })
+            }
+            Some(arg) if arg.as_ref() == b"SET" => {
+                if let Arguments::Three((_, ref key, ref value)) = args {
+                    Some(Cmd::SET {
+                        key: key.clone(),
+                        value: value.clone(),
+                    })
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum Arguments<Arg> {
@@ -19,6 +54,15 @@ impl<Arg> Arguments<Arg> {
         ArgumentsIter {
             args: self,
             index: 0,
+        }
+    }
+    pub fn first(&self) -> Option<&Arg> {
+        match *self {
+            Arguments::NoArgs => None,
+            Arguments::One(ref arg) => Some(arg),
+            Arguments::Two((ref arg0, _)) => Some(arg0),
+            Arguments::Three((ref arg0, _, _)) => Some(arg0),
+            Arguments::More(ref xs) => xs.get(0),
         }
     }
     pub fn map<T, F>(&self, f: F) -> Arguments<T>
@@ -75,7 +119,7 @@ impl<'a> Arguments<&'a [u8]> {
         let n = self.n_bytes();
         let mut bytes = Bytes::with_capacity(n);
         let args: Arguments<_> = self.iter()
-            .scan((0, 0), |(start, end), s| {
+            .scan((0, 0), |(_start, end), s| {
                 bytes.extend_from_slice(s);
                 Some((*end, *end + s.len()))
             })
