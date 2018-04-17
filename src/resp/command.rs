@@ -1,4 +1,4 @@
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use std::default::Default;
 use std::iter::FromIterator;
 use std::mem;

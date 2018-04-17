@@ -1,13 +1,12 @@
 use std::io;
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use bytes_decoder::{Decode, DecodeError};
 
 use tokio_io::codec::{Decoder, Encoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_proto::pipeline::ServerProto;
 
-use super::redis_value::RedisValue;
 use super::resp::decode::{check_array, decode_array};
 use super::resp::{Arguments, Value};
 

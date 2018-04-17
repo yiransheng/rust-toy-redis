@@ -1,6 +1,4 @@
-use btoi::{btoi, ParseIntegerError};
-use std::convert::{AsRef, From};
-use std::str;
+use btoi::btoi;
 
 use bytes::Bytes;
 use bytes_decoder::primitives::*;
@@ -58,6 +56,7 @@ pub fn decode_array<'b>(bytes: &'b [u8]) -> Result<Arguments<Bytes>, DecodeError
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str;
 
     fn parse_bulk_str<'b>() -> impl Decode<'b, Output = &'b str> {
         let end_line_crlf: BytesExact = BytesExact::new("\r\n".as_bytes());
