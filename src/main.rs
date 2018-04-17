@@ -1,12 +1,6 @@
-#![feature(conservative_impl_trait, universal_impl_trait)]
-
 extern crate btoi;
 extern crate bytes;
 extern crate bytes_decoder;
-#[macro_use]
-extern crate matches;
-#[macro_use]
-extern crate lazy_static;
 extern crate stringreader;
 
 extern crate futures;
