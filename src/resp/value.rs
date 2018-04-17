@@ -11,7 +11,7 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn n_bytes(&self) -> usize {
+    pub fn encoding_len(&self) -> usize {
         use self::Value::*;
 
         match *self {
@@ -22,7 +22,7 @@ impl Value {
             Status(ref s) => s.as_bytes().len(),
             Int(n) => count_digits(n),
             Data(ref xs) => xs.len(),
-            Array(ref xs) => xs.iter().map(|v| v.n_bytes()).sum(),
+            Array(ref xs) => xs.iter().map(|v| v.encoding_len()).sum(),
         }
     }
 
@@ -32,11 +32,13 @@ impl Value {
         match *self {
             Nil => ValueIter::Simple("$-1\r\n".as_bytes()),
             Okey => ValueIter::Simple("+Ok\r\n".as_bytes()),
-            Status(ref s) => ValueIter::Simple(s.as_bytes()),
-            Int(n) => ValueIter::Simple(format!("{}", n).as_bytes()),
+            Status(ref s) => {
+                ValueIter::Enclosed(format!("-{}", s.as_bytes().len()).as_bytes(), s.as_bytes())
+            }
+            Int(n) => ValueIter::Simple(format!(":{}{}\r\n", count_digits(n), n).as_bytes()),
             Data(ref xs) => {
-                let prefix = format!("${}\r\n", xs.len()).as_bytes();
-                ValueIter::Prefixed(prefix, &xs[..])
+                let prefix = format!("${}", xs.len()).as_bytes();
+                ValueIter::Enclosed(prefix, &xs[..])
             }
             Array(ref vs) => {
                 if vs.len() == 0 {
@@ -56,6 +58,7 @@ pub enum ValueIter<'a> {
     Done,
     Simple(&'a [u8]),
     Prefixed(&'a [u8], &'a [u8]),
+    Enclosed(&'a [u8], &'a [u8]),
     Array {
         curr: &'a ValueIter<'a>,
         values: &'a [Value],
@@ -68,6 +71,8 @@ impl<'a> Iterator for ValueIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         use self::ValueIter::*;
 
+        let line_end: &'static [u8] = b"\r\n";
+
         let iter = mem::replace(self, ValueIter::Done);
         let ret;
 
@@ -77,6 +82,10 @@ impl<'a> Iterator for ValueIter<'a> {
             Prefixed(p, s) => {
                 ret = Some(p);
                 mem::replace(self, ValueIter::Simple(s));
+            }
+            Enclosed(p, s) => {
+                ret = Some(p);
+                mem::replace(self, ValueIter::Prefixed(s, line_end));
             }
             Array {
                 mut curr,
@@ -106,7 +115,7 @@ impl<'a> Iterator for ValueIter<'a> {
 fn count_digits(mut v: i64) -> usize {
     // negative sign
     let mut result = if v < 0 { 2 } else { 1 };
-    let v = v.abs();
+    v = v.abs();
     loop {
         if v < 10 {
             return result;

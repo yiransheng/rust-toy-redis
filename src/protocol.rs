@@ -20,21 +20,30 @@ impl Decoder for RedisCodec {
     type Error = io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, io::Error> {
-        let checker = check_array();
-        let bytes = buf.as_ref();
+        let n_bytes: Result<usize, _>;
 
-        let n_bytes = checker.decode_(bytes);
+        {
+            let bytes = buf.as_ref();
+            let checker = check_array();
+
+            n_bytes = checker.decode_(bytes);
+        }
+
+        let consumed: usize;
 
         match n_bytes {
             Err(DecodeError::Incomplete) => return Ok(None),
             Err(DecodeError::Fail) => io_fail!(InvalidData, "RESP decode Error"),
-            Ok(consumed) => {
-                let bytes = buf.split_to(consumed).as_ref();
-                // checker ensures decoding will succeed
-                let args = decode_array(bytes).unwrap();
-                Ok(Some(args))
+            Ok(n) => {
+                consumed = n;
             }
         }
+
+        let bytes = buf.split_to(consumed);
+        let bytes = bytes.as_ref();
+        // checker ensures decoding will succeed
+        let args = decode_array(bytes).unwrap();
+        Ok(Some(args))
     }
 }
 
@@ -43,7 +52,7 @@ impl Encoder for RedisCodec {
     type Error = io::Error;
 
     fn encode(&mut self, msg: Value, buf: &mut BytesMut) -> io::Result<()> {
-        buf.reserve(msg.n_bytes());
+        buf.reserve(msg.encoding_len());
 
         for slice in msg.encoding_iter() {
             buf.put(slice)
