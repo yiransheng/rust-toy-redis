@@ -54,8 +54,8 @@ impl Encoder for RedisCodec {
     fn encode(&mut self, msg: Value, buf: &mut BytesMut) -> io::Result<()> {
         buf.reserve(msg.encoding_len());
 
-        for slice in msg.encoding_iter() {
-            buf.put(slice)
+        for item in msg.encoding_iter() {
+            item.encode(buf);
         }
 
         Ok(())

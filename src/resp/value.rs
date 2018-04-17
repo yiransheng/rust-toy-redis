@@ -1,3 +1,6 @@
+use bytes::{BufMut, Bytes, BytesMut};
+use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::mem;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -18,97 +21,159 @@ impl Value {
             // $-1\r\n
             Nil => 5,
             // +Ok\r\n
-            Okey => 5,
-            Status(ref s) => s.as_bytes().len(),
-            Int(n) => count_digits(n),
-            Data(ref xs) => xs.len(),
-            Array(ref xs) => xs.iter().map(|v| v.encoding_len()).sum(),
+            Okay => 5,
+            Status(ref s) => s.as_bytes().len() + 3,
+            Int(n) => count_digits(n) + 3,
+            Data(ref xs) => {
+                // $3\r\nfoo\r\n
+                let n = xs.len();
+                count_digits(n as i64) + n + 5
+            }
+            Array(ref xs) => {
+                let n = xs.len();
+                let data_len: usize = xs.iter().map(|v| v.encoding_len()).sum();
+                3 + count_digits(n as i64) + data_len
+            }
         }
     }
 
-    pub fn encoding_iter(&self) -> ValueIter {
+    pub fn encoding_iter(&self) -> EncodeIter {
+        use self::Value::*;
+
+        let mut queue = VecDeque::new();
+        let cursor;
+
+        match *self {
+            Array(ref vs) => {
+                for v in vs {
+                    queue.push_back(v);
+                }
+                cursor = EncodeItem::Prefixed(b'*', vs.len());
+            }
+            _ => {
+                queue.push_back(self);
+                cursor = EncodeItem::Done;
+            }
+        }
+
+        EncodeIter {
+            cursor,
+            values: queue,
+        }
+    }
+
+    fn as_encode_item(&self) -> EncodeItem {
         use self::Value::*;
 
         match *self {
-            Nil => ValueIter::Simple("$-1\r\n".as_bytes()),
-            Okey => ValueIter::Simple("+Ok\r\n".as_bytes()),
-            Status(ref s) => {
-                ValueIter::Enclosed(format!("-{}", s.as_bytes().len()).as_bytes(), s.as_bytes())
-            }
-            Int(n) => ValueIter::Simple(format!(":{}{}\r\n", count_digits(n), n).as_bytes()),
-            Data(ref xs) => {
-                let prefix = format!("${}", xs.len()).as_bytes();
-                ValueIter::Enclosed(prefix, &xs[..])
-            }
-            Array(ref vs) => {
-                if vs.len() == 0 {
-                    ValueIter::Simple("*0\r\n".as_bytes())
-                } else {
-                    ValueIter::Array {
-                        curr: &ValueIter::Simple(format!("*{}\r\n", vs.len()).as_bytes()),
-                        values: &vs[..],
-                    }
-                }
-            }
+            Nil => EncodeItem::Static(b"$-1\r\n"),
+            Okay => EncodeItem::Static(b"+Ok\r\n"),
+            Status(_) => EncodeItem::Enclosed(b'-', None, self),
+            Int(n) => EncodeItem::Enclosed(b':', None, self),
+            Data(ref xs) => EncodeItem::Enclosed(b'$', Some(xs.len()), self),
+            Array(ref vs) => EncodeItem::Prefixed(b'*', vs.len()),
+        }
+    }
+    fn as_value_slice(&self) -> Cow<[u8]> {
+        use self::Value::*;
+
+        match *self {
+            Status(ref s) => Cow::Borrowed(s.as_bytes()),
+            Int(n) => Cow::Owned(format!("{}", n).into_bytes()),
+            Data(ref xs) => Cow::Borrowed(&xs[..]),
+            _ => Cow::Borrowed(b""),
         }
     }
 }
 
-pub enum ValueIter<'a> {
+#[derive(Debug)]
+pub enum EncodeItem<'a> {
     Done,
-    Simple(&'a [u8]),
-    Prefixed(&'a [u8], &'a [u8]),
-    Enclosed(&'a [u8], &'a [u8]),
-    Array {
-        curr: &'a ValueIter<'a>,
-        values: &'a [Value],
-    },
+    Static(&'static [u8]),
+    Prefixed(u8, usize),
+    Enclosed(u8, Option<usize>, &'a Value),
+}
+impl<'a> EncodeItem<'a> {
+    pub fn encode(self, buf: &mut BytesMut) {
+        match self {
+            EncodeItem::Static(s) => buf.put(s),
+            EncodeItem::Prefixed(p, c) => {
+                buf.put(p);
+                buf.put(format!("{}\r\n", c));
+            }
+            EncodeItem::Enclosed(p, c, v) => {
+                buf.put(p);
+                if let Some(c) = c {
+                    buf.put(format!("{}", c));
+                    buf.put("\r\n");
+                }
+                buf.put(v.as_value_slice().as_ref());
+                buf.put("\r\n");
+            }
+            _ => {}
+        }
+    }
+    pub fn encoding_len(&self) -> usize {
+        match *self {
+            EncodeItem::Static(s) => s.len(),
+            EncodeItem::Prefixed(p, c) => 3 + count_digits(c as i64),
+            EncodeItem::Enclosed(p, c, v) => {
+                let mut n = 1;
+                if let Some(c) = c {
+                    n = n + count_digits(c as i64);
+                    n = n + 2;
+                }
+                n = n + v.as_value_slice().len();
+                n = n + 2;
+                n
+            }
+            _ => 0,
+        }
+    }
 }
 
-impl<'a> Iterator for ValueIter<'a> {
-    type Item = &'a [u8];
-
-    fn next(&mut self) -> Option<Self::Item> {
-        use self::ValueIter::*;
-
-        let line_end: &'static [u8] = b"\r\n";
-
-        let iter = mem::replace(self, ValueIter::Done);
-        let ret;
-
-        match iter {
-            Done => ret = None,
-            Simple(s) => ret = Some(s),
-            Prefixed(p, s) => {
-                ret = Some(p);
-                mem::replace(self, ValueIter::Simple(s));
-            }
-            Enclosed(p, s) => {
-                ret = Some(p);
-                mem::replace(self, ValueIter::Prefixed(s, line_end));
-            }
-            Array {
-                mut curr,
-                mut values,
-            } => {
-                match curr {
-                    Done => {
-                        if values.len() == 0 {
-                            // Attention: early return here
-                            return None;
-                        }
-                        curr = &values[0].encoding_iter();
-                        values = &values[1..];
-                    }
-                    _ => {}
-                }
-
-                ret = curr.next();
-                mem::replace(self, ValueIter::Array { curr, values });
+pub struct EncodeIter<'a> {
+    cursor: EncodeItem<'a>,
+    values: VecDeque<&'a Value>,
+}
+impl<'a> EncodeIter<'a> {
+    fn pop_item(&mut self) -> Option<EncodeItem<'a>> {
+        match self.cursor {
+            EncodeItem::Done => {}
+            _ => {
+                let current = mem::replace(&mut self.cursor, EncodeItem::Done);
+                return match current {
+                    EncodeItem::Done => None,
+                    x => Some(x),
+                };
             }
         }
 
-        ret
+        let next_value = self.values.pop_front();
+
+        if let Some(value) = next_value {
+            match value {
+                &Value::Array(ref vs) => {
+                    let n = vs.len();
+                    for i in 0..n {
+                        let j = n - i - 1;
+                        self.values.push_front(&vs[j]);
+                    }
+                }
+                _ => {}
+            }
+            Some(value.as_encode_item())
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> Iterator for EncodeIter<'a> {
+    type Item = EncodeItem<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pop_item()
     }
 }
 
@@ -132,5 +197,42 @@ fn count_digits(mut v: i64) -> usize {
 
         v /= 10000;
         result += 4;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str;
+
+    #[test]
+    fn test_encode() {
+        let mut buf = BytesMut::with_capacity(1024);
+
+        let values = Value::Array(vec![
+            Value::Okay,
+            Value::Okay,
+            Value::Int(32),
+            Value::Array(vec![]),
+        ]);
+        let bulk_string = Value::Data(b"hello world!".to_vec());
+
+        let value = Value::Array(vec![
+            bulk_string,
+            values,
+            Value::Status("err".to_string()),
+            Value::Nil,
+        ]);
+
+        for item in value.encoding_iter() {
+            println!("{:?}", item);
+            println!("Item Len: {}", item.encoding_len());
+            item.encode(&mut buf);
+        }
+        println!("Len: {}", value.encoding_len());
+        println!("Actual Len: {}", buf.as_ref().len());
+        println!("{}", str::from_utf8(buf.as_ref()).unwrap());
+
+        assert!(false);
     }
 }
